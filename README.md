@@ -1,108 +1,110 @@
 # WellCMS 3.0
 
+[English](./README.md) | [简体中文](./README.zh-CN.md)
+
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![PHP](https://img.shields.io/badge/PHP-7.2%2B-8892BF.svg)
 
-WellCMS 3.0 是一款采用**自研轻量级框架**构建的内容管理系统（CMS），**零 Composer 依赖**，支持 **FPM** 与 **Swoole** 双模式运行。它通过编译缓存、IoC 容器预编译、插件化架构和协程安全设计，实现了高性能与高扩展性的平衡。
+WellCMS 3.0 is a content management system (CMS) built on a **self-developed lightweight framework** with **zero Composer dependencies**, supporting dual runtime modes: **FPM** and **Swoole**. It balances high performance and extensibility through compiled caching, IoC container pre-compilation, plugin-based architecture, and coroutine-safe design.
 
 ---
 
-## ✨ 核心特性
+## ✨ Core Features
 
-- **零外部依赖** — 不依赖 Composer，开箱即用
-- **FPM / Swoole 双模式** — 既能在虚拟主机运行，也能承载高并发场景
-- **PSR-7 兼容** — 标准化的请求/响应对象与中间件管道
-- **自研 IoC 容器** — O(1) 循环依赖检测、反射缓存、延迟加载代理
-- **编译缓存体系** — 模板、语言包、容器、资产全自动编译缓存
-- **数据库抽象** — 查询构造器支持 MySQL / PostgreSQL / SQLite
-- **连接池与分片** — 协程连接池、读写分离、一致性哈希分片路由
-- **多级缓存** — Redis / Memcached / APCu / YAC / Static 多层调度
-- **插件化扩展** — 钩子注入、文件覆盖、语言包扩展、静态资产聚合
-- **任务调度器** — 基于 Redis 队列的常驻进程任务调度
-- **安全防护** — XSS 过滤、CSRF 防护、Token 验证、限流、登录校验
+- **Zero External Dependencies** — No Composer required, works out of the box
+- **FPM / Swoole Dual Mode** — Runs on shared hosting or high-concurrency scenarios
+- **PSR-7 Compatible** — Standardized request/response objects and middleware pipeline
+- **Self-developed IoC Container** — O(1) circular dependency detection, reflection caching, lazy-loading proxies
+- **Compiled Caching System** — Automatic compilation caching for templates, language packs, container, and assets
+- **Database Abstraction** — Query builder supporting MySQL / PostgreSQL / SQLite
+- **Connection Pooling & Sharding** — Coroutine connection pools, read/write splitting, consistent-hash sharding router
+- **Multi-level Caching** — Redis / Memcached / APCu / YAC / Static multi-layer scheduling
+- **Plugin-based Extensions** — Hook injection, file overrides, language pack extensions, static asset aggregation
+- **Task Scheduler** — Resident process task scheduling based on Redis queues
+- **Security Protection** — XSS filtering, CSRF protection, token verification, rate limiting, login authentication
 
 ---
 
-## 📁 目录结构
+## 📁 Directory Structure
 
 ```
 wellcms_3.0/
-├── app/              # 应用层（控制器、服务、中间件、模型、视图）
-├── bin/              # CLI 入口（Swoole 服务器 / 任务调度器）
-├── config/           # 运行时配置文件
-├── install/          # 图形化安装向导
-├── public/           # Web 入口与静态资源
-├── src/              # 框架层（IoC、HTTP、DB、Cache、Session、Scheduler）
-├── storage/          # 日志、编译缓存、上传文件
-├── themes/           # 主题风格目录
-└── plugins/          # 插件目录
+├── app/              # Application layer (controllers, services, middleware, models, views)
+├── bin/              # CLI entry points (Swoole server / task scheduler)
+├── config/           # Runtime configuration files
+├── install/          # Graphical installation wizard
+├── public/           # Web entry point and static assets
+├── src/              # Framework layer (IoC, HTTP, DB, Cache, Session, Scheduler)
+├── storage/          # Logs, compiled cache, uploaded files
+├── themes/           # Theme directory
+└── plugins/          # Plugin directory
 ```
 
-> `plugins/` 与 `themes/` 中的文件在运行时通过 `Compile.php` 合并到主程序中。
+> Files in `plugins/` and `themes/` are merged into the main program at runtime via `Compile.php`.
 
 ---
 
-## 🚀 环境要求
+## 🚀 Requirements
 
-- **PHP** ≥ 7.2（测试兼容至 8.3）
-- **扩展**：PDO、mbstring、gd / imagick、fileinfo、openssl
-- **Swoole 模式**（可选）：swoole 扩展 ≥ 4.5
-- **数据库**：MySQL / PostgreSQL / SQLite
+- **PHP** ≥ 7.2 (tested up to 8.3)
+- **Extensions**: PDO, mbstring, gd / imagick, fileinfo, openssl
+- **Swoole Mode** (optional): swoole extension ≥ 4.5
+- **Database**: MySQL / PostgreSQL / SQLite
 
 ---
 
-## ⚡ 安装
+## ⚡ Installation
 
-### 方式一：FPM 部署
+### Method 1: FPM Deployment
 
-1. 将 Web 服务器文档根目录指向 `public/`
-2. 确保 `storage/`、`config/`、`install/` 目录可写
-3. 配置 Nginx 伪静态规则（详见 `nginx.conf.example`）：
-   - 插件/主题/视图/上传目录需配置 `alias` 静态资源映射
-   - 伪静态支持 3 种 URL 风格：`user-login.html` | `/user/login.html` | `/user/login`
-4. 访问 `http://your-domain/install/` 完成 5 步安装向导
-5. 安装完成后请确保 `install/` 目录存在（`app/Bootstrap.php` 依赖 `install/install.lock` 判断安装状态），建议通过 Web 服务器配置禁止直接访问 `install/` 目录
+1. Point your web server document root to `public/`
+2. Ensure `storage/`, `config/`, and `install/` directories are writable
+3. Configure Nginx rewrite rules (see `nginx.conf.example`):
+   - Plugin/theme/view/upload directories require `alias` static resource mapping
+   - Rewrite supports 3 URL styles: `user-login.html` | `/user/login.html` | `/user/login`
+4. Visit `http://your-domain/install/` to complete the 5-step installation wizard
+5. After installation, ensure the `install/` directory remains (`app/Bootstrap.php` uses `install/install.lock` to detect installation status). It is recommended to block direct access to `install/` via web server configuration
 
-### 方式二：Swoole 部署
+### Method 2: Swoole Deployment
 
 ```bash
-# 启动 Swoole 服务器（默认端口 9501）
+# Start Swoole server (default port 9501)
 php bin/well-server start
 
-# 后台守护进程
+# Run as daemon
 php bin/well-server start -d
 
-# 停止 / 重启 / 热重载 / 状态
+# Stop / restart / reload / status
 php bin/well-server stop
 php bin/well-server restart
 php bin/well-server reload
 php bin/well-server status
 ```
 
-> 📖 更详细的 Swoole 生产部署说明请参考：[`bin/SWOOLE_DEPLOY_GUIDE.md`](./bin/SWOOLE_DEPLOY_GUIDE.md)
+> 📖 For detailed Swoole production deployment instructions, see [`bin/SWOOLE_DEPLOY_GUIDE.md`](./bin/SWOOLE_DEPLOY_GUIDE.md)
 
 ---
 
-## 🛠️ CLI 工具
+## 🛠️ CLI Tools
 
-| 命令 | 说明 |
-|------|------|
-| `php bin/well-server {start\|stop\|restart\|reload\|status}` | Swoole 服务器管理 |
-| `php bin/scheduler` | 启动常驻任务调度器 |
-| `php bin/scheduler-health-check` | 调度器健康检查 |
+| Command | Description |
+|---------|-------------|
+| `php bin/well-server {start\|stop\|restart\|reload\|status}` | Swoole server management |
+| `php bin/scheduler` | Start resident task scheduler |
+| `php bin/scheduler-health-check` | Scheduler health check |
 
-> 📖 调度器生产部署与运维指南请参考：[`bin/SCHEDULER_DEPLOY_GUIDE.md`](./bin/SCHEDULER_DEPLOY_GUIDE.md)
-
----
-
-## 📖 文档
-
-- [WellCMS 3.0 详细介绍](./docs/WELLCMS_3.0_INTRODUCTION.md)
+> 📖 For scheduler production deployment and operations guide, see [`bin/SCHEDULER_DEPLOY_GUIDE.md`](./bin/SCHEDULER_DEPLOY_GUIDE.md)
 
 ---
 
-## 📄 许可证
+## 📖 Documentation
 
-本项目基于 [MIT License](./LICENSE) 开源。
+- [WellCMS 3.0 Detailed Introduction](./docs/WELLCMS_3.0_INTRODUCTION.md)
+
+---
+
+## 📄 License
+
+This project is open-sourced under the [MIT License](./LICENSE).
 
 Copyright (c) 2026 WellCMS
