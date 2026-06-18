@@ -1,0 +1,131 @@
+<?php use App\Core\Compile;?>
+<?php include Compile::include(APP_PATH.'app/views/admin/header.inc.htm');?>
+<?php $itemList = $view->get('item_list'); ?>
+
+<!-- Actions Bar -->
+<div class="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4 w-full max-w-7xl mx-auto">
+	<div class="flex items-center space-x-2">
+		<h1 class="text-xl font-bold text-gray-900 dark:text-white"><?php echo $view->get('language.user_group'); ?>
+		</h1>
+	</div>
+
+	<div class="flex items-center space-x-3 w-full sm:w-auto">
+		<a href="<?php echo $view->get('operation_links.create');?>"
+			class="flex-1 sm:flex-none px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-lg shadow-blue-500/30 transition-all transform hover:-translate-y-0.5 text-sm font-bold text-center">
+			+ <?php echo $view->get('language.create'); ?>
+		</a>
+	</div>
+</div>
+
+<!-- Groups Table -->
+<div class="glass-panel rounded-2xl overflow-hidden mb-6 w-full max-w-7xl mx-auto" id="group-list">
+	<div class="overflow-x-auto">
+		<table class="min-w-full text-left text-sm">
+			<thead class="bg-gray-50/50 dark:bg-slate-800/50 border-b border-gray-200 dark:border-gray-700">
+				<tr>
+					<th
+						class="px-6 py-4 font-bold text-gray-600 dark:text-gray-300 uppercase tracking-wider text-[10px]">
+						GID</th>
+					<th
+						class="px-6 py-4 font-bold text-gray-600 dark:text-gray-300 uppercase tracking-wider text-[10px]">
+						<?php echo $view->get('language.user_group'); ?></th>
+					<th
+						class="px-6 py-4 font-bold text-gray-600 dark:text-gray-300 uppercase tracking-wider text-[10px]">
+						<?php echo $view->get('language.start_point'); ?></th>
+					<th
+						class="px-6 py-4 font-bold text-gray-600 dark:text-gray-300 uppercase tracking-wider text-[10px]">
+						<?php echo $view->get('language.end_point'); ?></th>
+					<th
+						class="px-6 py-4 font-bold text-gray-600 dark:text-gray-300 uppercase tracking-wider text-[10px] text-right">
+						<?php echo $view->get('language.operation'); ?></th>
+				</tr>
+			</thead>
+			<tbody class="divide-y divide-gray-100 dark:divide-gray-800">
+				<?php foreach($view->iterate('result') as $item): ?>
+				<tr class="hover:bg-blue-50/30 dark:hover:bg-blue-900/10 transition-colors duration-300">
+					<td class="px-6 py-5">
+						<span class="<?php echo $item->raw('id_fmt.class');?>">
+							<?php echo $item->e('id_fmt.label');?>
+						</span>
+					</td>
+					<td class="px-6 py-5">
+						<div class="flex items-center gap-3">
+							<div class="w-1.5 h-1.5 rounded-full <?php echo $item->raw('name_fmt.dot_class');?>"></div>
+							<span class="text-sm font-bold text-gray-900 dark:text-white tracking-wide">
+								<?php echo $item->e('name_fmt.name');?>
+							</span>
+							<?php if ($item->get('name_fmt.is_system')): ?>
+							<span
+								class="px-1.5 py-0.5 rounded-md bg-amber-100/50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 text-[9px] font-bold tracking-widest uppercase">
+								<?php echo $item->e('name_fmt.system_label');?>
+							</span>
+							<?php endif; ?>
+						</div>
+					</td>
+					<td class="px-6 py-5 font-mono text-xs text-gray-500 dark:text-gray-400">
+						<?php echo $item->e('credits_from_fmt');?>
+					</td>
+					<td class="px-6 py-5 font-mono text-xs text-gray-500 dark:text-gray-400">
+						<?php echo $item->e('credits_to_fmt');?>
+					</td>
+					<td class="px-6 py-5 text-right space-x-2">
+						<?php foreach($item->iterate('operations') as $op): ?>
+						<a href="<?php echo $op->raw('url');?>"
+							class="<?php echo $op->raw('class');?> font-bold transition-colors">
+							<?php echo $op->e('label');?>
+						</a>
+						<?php endforeach; ?>
+					</td>
+				</tr>
+				<?php endforeach; ?>
+			</tbody>
+		</table>
+	</div>
+
+	<!-- Footer Info -->
+	<div class="px-6 py-4 border-t border-gray-100 dark:border-gray-800 bg-gray-50/30 dark:bg-white/5">
+		<div
+			class="flex items-center gap-3 text-[10px] font-bold text-amber-600 dark:text-amber-500 uppercase tracking-[0.1em] leading-none">
+			<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+					d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+			</svg>
+			<?php echo $view->e('language.group_operation_warning'); ?>
+		</div>
+	</div>
+</div>
+
+<?php include Compile::include(APP_PATH . 'app/views/admin/footer.inc.htm');?>
+<script>
+	document.addEventListener("DOMContentLoaded", function () {
+		document.addEventListener('click', async (e) => {
+			const btn = e.target.closest('.ajax-delete');
+			if (!btn) return;
+			e.preventDefault();
+
+			const url = btn.getAttribute('href');
+			const row = btn.closest('tr');
+			const confirmMsg = "<?php echo $view->get('language.confirm_delete'); ?>";
+
+			wellcms.confirm(confirmMsg, async () => {
+				try {
+					const res = await wellcms.post(url, {
+						_csrf_token: "<?php echo $view->e('csrf_token'); ?>"
+					});
+
+					if (res.code === 0) {
+						wellcms.toast(res.message || "Deleted successfully", "success");
+						if (row) {
+							row.classList.add('opacity-0', 'scale-[0.98]', 'transition-all', 'duration-500');
+							setTimeout(() => row.remove(), 500);
+						}
+					} else {
+						wellcms.error(res.message || "Deletion failed");
+					}
+				} catch (err) {
+					wellcms.error("Network Error: " + err.message);
+				}
+			});
+		});
+	});
+</script>

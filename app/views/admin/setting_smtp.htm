@@ -1,0 +1,120 @@
+<?php use App\Core\Compile;?>
+<?php include Compile::include(APP_PATH.'app/views/admin/header.inc.htm');?>
+<?php $itemList = $view->get('item_list'); ?>
+
+<!-- Actions Bar -->
+<div class="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4 w-full max-w-7xl mx-auto">
+	<div class="flex items-center space-x-2 w-full sm:w-auto">
+		<h1 class="text-2xl font-black text-gray-900 dark:text-white tracking-tight">
+			SMTP <?php echo $view->get('language.setting'); ?>
+		</h1>
+	</div>
+
+	<div class="flex items-center space-x-3 w-full sm:w-auto">
+		<a href="<?php echo $view->get('operation_links.create');?>"
+			class="flex-1 sm:flex-none px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-lg shadow-blue-500/30 transition-all transform hover:-translate-y-0.5 text-sm font-bold text-center">
+			+ <?php echo $view->get('language.add'); ?>
+		</a>
+	</div>
+</div>
+
+<!-- SMTP Table -->
+<div class="glass-panel rounded-2xl overflow-hidden mb-6 w-full max-w-7xl mx-auto" id="smtp-list">
+	<div class="overflow-x-auto">
+		<table class="min-w-full text-left text-sm">
+			<thead class="bg-gray-50/50 dark:bg-slate-800/50 border-b border-gray-200 dark:border-gray-700">
+				<tr>
+					<th class="px-6 py-4 font-bold text-gray-600 dark:text-gray-300">Email</th>
+					<th class="px-6 py-4 font-bold text-gray-600 dark:text-gray-300">Host</th>
+					<th class="px-6 py-4 font-bold text-gray-600 dark:text-gray-300 w-24">Port</th>
+					<th class="px-6 py-4 font-bold text-gray-600 dark:text-gray-300">Username</th>
+					<th class="px-6 py-4 font-bold text-gray-600 dark:text-gray-300">Password</th>
+					<th class="px-6 py-4 font-bold text-gray-600 dark:text-gray-300 text-right w-32">
+						<?php echo $view->get('language.operation'); ?>
+					</th>
+				</tr>
+			</thead>
+			<tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+				<?php if ($itemList) { foreach($itemList as $key => $item) { ?>
+				<tr id="<?php echo $key;?>" class="hover:bg-gray-50/50 dark:hover:bg-white/5 transition-colors group">
+					<td class="px-6 py-4 font-bold text-gray-900 dark:text-white"><?php echo $item['email'];?></td>
+					<td class="px-6 py-4 text-xs font-mono text-gray-500 dark:text-gray-400"><?php echo $item['host'];?>
+					</td>
+					<td class="px-6 py-4 text-xs font-mono text-gray-500 dark:text-gray-400"><?php echo $item['port'];?>
+					</td>
+					<td class="px-6 py-4 text-xs text-gray-500 dark:text-gray-400"><?php echo $item['username'];?></td>
+					<td class="px-6 py-4">
+						<span
+							class="px-2 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-[10px] font-mono text-gray-400 dark:text-gray-500">********</span>
+					</td>
+					<td class="px-6 py-4 text-right space-x-2">
+						<?php if (!empty($item['operation_links']['update'])) { ?>
+						<a href="<?php echo $item['operation_links']['update'];?>"
+							class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 font-bold transition-colors">
+							<?php echo $view->get('language.change'); ?>
+						</a>
+						<?php } ?>
+						<?php if (!empty($item['operation_links']['delete'])) { ?>
+						<a href="<?php echo $item['operation_links']['delete'];?>"
+							class="ajax-delete text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 font-bold transition-colors"
+							data-id="<?php echo $item['id'];?>">
+							<?php echo $view->get('language.delete'); ?>
+						</a>
+						<?php } ?>
+					</td>
+				</tr>
+				<?php }} else { ?>
+				<tr>
+					<td colspan="6" class="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
+						<div class="flex flex-col items-center">
+							<svg class="w-12 h-12 mb-4 opacity-20" fill="none" stroke="currentColor"
+								viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+									d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+							</svg>
+							<span class="text-sm font-medium"><?php echo $view->get('language.none');?></span>
+						</div>
+					</td>
+				</tr>
+				<?php } ?>
+			</tbody>
+		</table>
+	</div>
+</div>
+
+<?php include Compile::include(APP_PATH . 'app/views/admin/footer.inc.htm');?>
+<script>
+	document.addEventListener("DOMContentLoaded", function () {
+		document.addEventListener('click', async (e) => {
+			const btn = e.target.closest('.ajax-delete');
+			if (!btn) return;
+			e.preventDefault();
+
+			const url = btn.getAttribute('href');
+			const row = btn.closest('tr');
+			const id = btn.dataset.id;
+			const confirmMsg = "<?php echo $view->get('language.confirm_delete'); ?>";
+
+			wellcms.confirm(confirmMsg, async () => {
+				try {
+					const res = await wellcms.post(url, {
+						id: id,
+						_csrf_token: "<?php echo $view->e('csrf_token'); ?>"
+					});
+
+					if (res.code === 0) {
+						wellcms.toast(res.message || "Deleted successfully", "success");
+						if (row) {
+							row.classList.add('opacity-0', 'transition-opacity', 'duration-500');
+							setTimeout(() => row.remove(), 500);
+						}
+					} else {
+						wellcms.error(res.message || "Deletion failed");
+					}
+				} catch (err) {
+					wellcms.error("Network Error: " + err.message);
+				}
+			});
+		});
+	});
+</script>

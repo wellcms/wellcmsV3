@@ -1,0 +1,115 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+/**
+ * WellCMS Scheduler Entry（必须安装配置 Redis 缓存）
+ * 现代化调度器入口 - 专为 Supervisor 设计
+ * * 职责：
+ * 1. 初始化框架环境 (同 index.php)
+ * 2. 从容器获取 TaskExecutor
+ * 3. 启动常驻循环
+ */
+
+// 定义核心常量 (保持与 public/index.php 一致的安全约束)
+define('IN_WELLCMS', true);
+define('SCHEDULER_MODE', true); // 标记为调度器模式，防止 Bootstrap 加载不需要的 Web 组件
+define('APP_PATH', str_replace('\\', DIRECTORY_SEPARATOR, dirname(__DIR__)) . DIRECTORY_SEPARATOR);
+
+// 根据环境设置 DEBUG (建议生产环境设为 0)
+define('DEBUG', 0);
+
+if (DEBUG) {
+    error_reporting(E_ALL);
+    ini_set('display_errors', '1');
+} else {
+    error_reporting(E_ALL & ~E_NOTICE & ~E_DEPRECATED);
+    ini_set('display_errors', '0');
+}
+
+// 加载核心文件 (同 public/index.php)
+require APP_PATH . 'app/Core/Compile.php';
+require APP_PATH . 'app/Core/Autoload.php';
+
+try {
+    // 框架初始化
+    // 初始化编译缓存与钩子
+    $containerCache = APP_PATH . 'storage/tmp/container.php';
+
+    // 初始化 Compile：收集插件钩子
+    \App\Core\Compile::init($containerCache ?? null);
+
+    // 引导启动，加载 Provider (Config, Database, Logger 等)
+    // Bootstrap 内部会识别 SCHEDULER_MODE 并加载 SchedulerServiceProvider
+    /** @var \Framework\Core\Container $container */
+    $container = \App\Bootstrap::init();
+
+    // 加载容器编译缓存 (Performance)
+    if (file_exists($containerCache) && (!defined('DEBUG') || DEBUG == 0)) {
+        $defs = require $containerCache;
+        $container->loadDefinitions($defs);
+    }
+
+    // [轻量化方案] 仅确保核心任务已进入队列
+    $taskManage = $container->get(\Framework\Scheduler\TaskManage::class);
+
+    // 1. 类映射表监控
+    $taskManage->createTask([
+        'className'  => \Framework\Scheduler\Jobs\GenerateClassmapJob::class,
+        'methodName' => 'handle',
+        'priority'   => 9,
+        'dedupeKey'  => 'system:classmap_monitor'
+    ]);
+
+    // 2. Session GC 垃圾回收监控
+    $taskManage->createTask([
+        'className'  => \App\Jobs\SessionGCJob::class,
+        'methodName' => 'handle',
+        'priority'   => 10,
+        'dedupeKey'  => 'system:session_gc_monitor'
+    ]);
+
+    // 3. well_article 阅读数批量落盘监控
+    $taskManage->createTask([
+        'className'  => \Plugins\well_article\Jobs\ArticleViewFlushJob::class,
+        'methodName' => 'handle',
+        'priority'   => 5,
+        'dedupeKey'  => 'well_article:view_flush_monitor'
+    ]);
+
+    // 4. well_article 定时发布队列监控
+    $taskManage->createTask([
+        'className'  => \Plugins\well_article\Jobs\ArticlePublishJob::class,
+        'methodName' => 'handle',
+        'priority'   => 5,
+        'dedupeKey'  => 'well_article:scheduled_publish_monitor'
+    ]);
+
+    // 5. well_article 历史归档
+    $taskManage->createTask([
+        'className'  => \Plugins\well_article\Jobs\ArticleArchiveJob::class,
+        'methodName' => 'handle',
+        'priority'   => 3,
+        'dedupeKey'  => 'well_article:archive_monitor'
+    ]);
+
+    // 获取命令行参数 (用于 Supervisor 调优)
+    // 格式: php scheduler.php --max-runs=5000 --memory=128
+    $options = getopt('', ['max-runs::', 'memory::']);
+    $maxRuns = (int)($options['max-runs'] ?? 5000);
+    $memory  = (int)($options['memory'] ?? 128);
+
+    // [核心] 获取执行器
+    // 此时容器会调用 SchedulerServiceProvider，自动从 CacheManager 提取 Redis 驱动
+    // 没有任何“配置获取失败”的风险，因为 Bootstrap 已经把所有 Config 都加载好了
+    /** @var \Framework\Scheduler\TaskExecutor $executor */
+    $executor = $container->get(\Framework\Scheduler\TaskExecutor::class);
+
+    // 6. 启动循环
+    $executor->runLoop($maxRuns, $memory);
+} catch (\Throwable $e) {
+    $msg = "[FATAL] Scheduler crashed: " . $e->getMessage();
+    fwrite(STDERR, $msg . PHP_EOL . $e->getTraceAsString() . PHP_EOL);
+    exit(1); // 退出码 1 通知 Supervisor 异常退出（会触发重启）
+}

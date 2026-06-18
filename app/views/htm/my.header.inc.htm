@@ -1,0 +1,252 @@
+<?php use App\Core\Compile;?>
+<!--{hook my_header_start.htm}-->
+<!DOCTYPE html>
+<html class="h-full" lang="<?php echo $view->e('website.locale.default');?>">
+
+	<head>
+		<?php echo defined('BASE_HREF') ? '<base href="'.BASE_HREF.'" />' : '' ;?>
+		<!--{hook my_header_meta_before.htm}-->
+		<meta charset="UTF-8">
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+		<meta http-equiv="X-UA-Compatible" content="IE=Edge,chrome=1" />
+		<meta http-equiv="Cache-Control" content="no-transform" />
+		<meta http-equiv="Cache-Control" content="no-siteapp" />
+		<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no" />
+		<meta name="referrer" content="origin-when-cross-origin">
+		<meta name="applicable-device" content="pc,mobile" />
+		<meta name="MobileOptimized" content="width" />
+		<meta name="HandheldFriendly" content="true" />
+		<meta name="renderer" content="webkit" />
+		<?php $header = $view->website->header;?>
+		<?php if($keywords = $header->e('keywords')) { ?>
+		<meta name="keywords" content="<?php echo $keywords;?>" />
+		<?php } ?>
+
+		<meta name="description" content="<?php echo $header->e('description');?>" />
+
+		<title>
+			<?php echo $header->get('title');?>
+		</title>
+
+		<!--{hook my_header_link_before.htm}-->
+
+		<?php $staticVersion = $view->get('website.static_version'); ?>
+		<?php $viewPath = $view->get('website.current.view'); ?>
+		<link rel="shortcut icon" href="<?php echo $viewPath;?>image/favicon.ico">
+		<link rel="icon" sizes="32x32" href="<?php echo $viewPath;?>image/favicon.ico" type="image/x-icon">
+		<link rel="Bookmark" href="<?php echo $viewPath;?>image/favicon.ico">
+
+		<asset-css group="global" />
+		<asset-js group="global" />
+		<link rel="stylesheet" href="<?php echo $viewPath;?>css/tailwind.min.css<?php echo $staticVersion; ?>">
+
+		<!--{hook my_header_link_after.htm}-->
+
+	</head>
+
+	<body class="min-h-screen flex flex-col bg-gray-50 dark:bg-slate-900 text-gray-800 dark:text-gray-200 font-sans">
+
+		<!-- Mobile Sidebar Backdrop -->
+		<div id="sidebar-backdrop" class="fixed inset-0 bg-black/50 z-40 hidden lg:hidden"
+			onclick="document.getElementById('sidebar').classList.add('-translate-x-full'); this.classList.add('hidden');">
+		</div>
+
+		<!-- Floating Sidebar Trigger (Mobile Only) -->
+		<button id="floating-sidebar-trigger"
+			class="fixed left-0 top-1/2 -translate-y-1/2 z-[45] bg-blue-600 text-white p-2 pr-1.5 rounded-r-lg shadow-xl shadow-blue-500/20 lg:hidden hover:bg-blue-700 transition-all active:scale-90 group"
+			onclick="document.getElementById('sidebar').classList.remove('-translate-x-full'); document.getElementById('sidebar-backdrop').classList.remove('hidden');">
+			<svg class="w-6 h-6 animate-pulse group-active:animate-none" fill="none" stroke="currentColor"
+				viewBox="0 0 24 24">
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 5l7 7-7 7M5 5l7 7-7 7">
+				</path>
+			</svg>
+		</button>
+
+		<!-- Header (Simplified for User Center) -->
+		<header class="fixed top-0 w-full z-50 glass-header">
+			<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+				<div class="flex justify-between items-center h-16">
+					<div class="flex items-center h-16">
+						<a href="/"
+							class="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-blue-400 dark:to-indigo-400">
+							WellCMS
+						</a>
+						<?php if ($userHome = $view->get('language.user_home')) { ?>
+							<span
+								class="ml-2 px-2 py-0.5 rounded text-xs bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 tracking-wider self-end mb-4">
+								<?php echo $userHome; ?>
+							</span>
+						<?php } ?>
+					</div>
+					<div class="flex items-center space-x-2">
+						<!-- <button onclick="wellcms.showMessages(this)"
+							class="relative p-2 text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-colors">
+							<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+									d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9">
+								</path>
+							</svg>
+							<span
+								class="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-red-500 ring-2 ring-white dark:ring-slate-900"></span>
+						</button> -->
+						<!--{hook my_header_nav_inc_start.htm}-->
+						<button onclick="wellcms.toggleDarkMode()"
+							class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10">
+							<span class="dark:hidden">
+								<svg class="w-5 h-5 text-gray-600 dark:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path>
+								</svg>
+							</span>
+							<span class="hidden dark:inline">
+								<svg class="w-5 h-5 text-yellow-400 hidden dark:block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path>
+								</svg>
+							</span>
+						</button>
+						<!--{hook my_header_nav_inc_end.htm}-->
+						<!-- logged in -->
+						<script>
+							window.__CURRENT_USER__ = '<?= json_encode(['administer' => $view->get('user.administer', 0), 'username' => $view->get('user.username'), 'avatar' => $view->get('user.avatar_url'), 'groupname' => $view->get('user.groupname'), 'links' => ['home' => ['name' => $view->get('user.links.home.name'), 'url' => $view->get('user.links.home.url')], 'profile' => ['name' => $view->get('user.links.profile.name'), 'url' => $view->get('user.links.profile.url')], 'admin' => ['name' => $view->get('user.links.admin.name'), 'url' => $view->get('user.links.admin.url')], 'logout' => ['name' => $view->get('user.links.logout.name'), 'url' => $view->get('user.links.logout.url')]]], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP); ?>';
+						</script>
+						<!--{hook my_header_nav_inc_center_user_logged_before.htm}-->
+						<button onclick="wellcms.showUserMenu(this, window.__CURRENT_USER__)"
+							class="relative ml-2 focus:outline-none lg:hidden">
+							<div
+								class="h-9 w-9 rounded-full bg-gradient-to-r from-blue-500 to-indigo-600 p-0.5 shadow-md hover:shadow-lg transition-all duration-200 hover:scale-105">
+								<img class="my-avatar h-full w-full rounded-full border-2 border-white dark:border-slate-900 bg-white"
+									src="<?php echo $view->get('user.avatar_url');?>"
+									alt="<?php echo $view->get('user.username');?>">
+								<span
+									class="absolute bottom-0 right-0 block h-2.5 w-2.5 rounded-full bg-green-400 ring-2 ring-white dark:ring-slate-900"></span>
+							</div>
+						</button>
+						<!--{hook my_header_nav_inc_center_user_logged_after.htm}-->
+					</div>
+				</div>
+			</div>
+		</header>
+
+		<div class="flex-1 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-24 pb-12 w-full">
+			<div class="flex flex-col lg:flex-row gap-8">
+
+				<!-- User Sidebar -->
+				<aside id="sidebar"
+					class="fixed inset-y-0 left-0 z-[60] lg:z-40 w-64 bg-gray-50/95 dark:bg-slate-900/95 backdrop-blur-xl lg:bg-transparent lg:backdrop-blur-none transform -translate-x-full lg:translate-x-0 lg:static lg:inset-auto transition-transform duration-300 shadow-2xl lg:shadow-none flex-shrink-0 p-4 lg:p-0 overflow-y-auto lg:overflow-visible">
+					<div class="glass-panel p-6 rounded-2xl lg:sticky lg:top-24 h-full lg:h-auto">
+
+						<!-- Mobile Close Button -->
+						<!-- <div class="flex justify-end lg:hidden mb-4">
+							<button class="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400"
+								onclick="document.getElementById('sidebar').classList.add('-translate-x-full'); document.getElementById('sidebar-backdrop').classList.add('hidden');">
+								<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+										d="M6 18L18 6M6 6l12 12">
+									</path>
+								</svg>
+							</button>
+						</div> -->
+
+						<div class="hidden lg:block border-b border-gray-200 dark:border-gray-700">
+							<div class="flex flex-col items-center text-center mb-4">
+								<div class="relative">
+									<img class="my-avatar h-20 w-20 rounded-full border-2 border-white dark:border-gray-700 shadow-md"
+										src="<?php echo $view->get('user.avatar_url', ''); ?>"
+										alt="<?php echo $view->get('user.username', ''); ?>">
+									<div
+										class="absolute bottom-0 right-0 h-4 w-4 bg-green-500 border-2 border-white dark:border-gray-800 rounded-full">
+									</div>
+								</div>
+								<!--{hook my_header_user_info_start.htm}-->
+								<h2 class="mt-4 font-bold text-lg"><?php echo $view->get('user.username', ''); ?></h2>
+								<p class="text-sm text-gray-500 dark:text-gray-400">
+									<?php echo $view->get('user.groupname', ''); ?>
+								</p>
+								<div class="grid grid-cols-2 gap-1 mt-4 w-full">
+									<?php if ($view->get('user.administer', 0) == 1) { ?>
+									<a href="<?php echo $view->get('user.links.admin.url', ''); ?>" target="_blank"
+										class="antigravity-float flex items-center justify-center p-2 text-xs text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/10 rounded-lg transition-colors group">
+										<svg class="mr-1 h-4 w-4 text-gray-400 group-hover:text-blue-500 transition-colors"
+											fill="none" viewBox="0 0 24 24" stroke="currentColor">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+												d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z">
+											</path>
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+												d="M15 12a3 3 0 11-6 0 3 3 0 016 0z">
+											</path>
+										</svg>
+										<span class="truncate"><?php echo $view->get('user.links.admin.name', ''); ?></span>
+									</a>
+									<?php } ?>
+									<button
+										class="ajax-get antigravity-float flex items-center justify-center p-2 text-xs text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+										data-href="<?php echo $view->get('user.links.logout.url', ''); ?>"
+										data-confirm="<?php echo $view->get('language.logout'); ?>?">
+										<svg class="mr-1 h-4 w-4 text-red-400" fill="none" viewBox="0 0 24 24"
+											stroke="currentColor">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+												d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1">
+											</path>
+										</svg>
+										<span class="truncate"><?php echo $view->get('language.logout'); ?></span>
+									</button>
+								</div>
+								<!--{hook my_header_user_info_end.htm}-->
+							</div>
+						</div>
+
+						<nav class="relative group lg:mt-2">
+							<!-- Up Arrow -->
+							<div id="nav-up-arrow"
+								class="absolute -top-2 left-0 right-0 h-8 bg-gradient-to-b from-gray-50/95 dark:from-slate-900/95 to-transparent z-10 flex items-center justify-center cursor-pointer opacity-0 pointer-events-none transition-opacity duration-300 rounded-t-xl">
+								<svg class="w-5 h-5 text-blue-500 animate-bounce" fill="none" stroke="currentColor"
+									viewBox="0 0 24 24">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+										d="M5 15l7-7 7 7"></path>
+								</svg>
+							</div>
+
+							<div id="nav-scroll-container"
+								class="space-y-1 overflow-y-auto max-h-[calc(100vh-300px)] lg:max-h-[calc(100vh-400px)] scrollbar-hide py-2 focus:outline-none">
+								<!--{hook my.header_inc_menu_before.htm}-->
+								<?php foreach ($view->get('menu', []) as $key => $item) { ?>
+								<a href="<?php echo $item['original_url']; ?>"
+									class="flex items-center px-4 py-2.5 text-sm font-medium rounded-xl <?php echo $item['parent'] == $view->get('menu_fixed.parent')? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-white/5 hover:text-gray-900 dark:hover:text-white transition-colors'; ?> ">
+									<span class="mr-3"><?php echo $item['icon']; ?></span>
+									<?php echo $item['name']; ?>
+								</a>
+								<?php if ($item['parent'] == $view->get('menu_fixed.parent') && !empty($item['children'])) { ?>
+								<div class="mt-1 space-y-0.5">
+									<?php foreach ($item['children'] as $subKey => $subItem) { ?>
+									<a href="<?php echo $subItem['url']; ?>"
+										class="flex items-center pl-10 pr-4 py-2 text-xs font-medium rounded-xl <?php echo $subItem['child'] == $view->get('menu_fixed.child')? 'text-blue-700 dark:text-blue-300' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-white transition-colors'; ?> ">
+										<?php echo $subItem['name']; ?>
+									</a>
+										<?php if (!empty($subItem['children'])) { ?>
+										<div class="ml-4 mt-0.5 space-y-0.5 border-l-2 border-gray-200 dark:border-gray-700 pl-3">
+											<?php foreach ($subItem['children'] as $sub2Key => $sub2Item) { ?>
+											<a href="<?php echo $sub2Item['url']; ?>"
+												class="block py-1.5 text-xs font-medium rounded-lg <?php echo $sub2Item['child'] == $view->get('menu_fixed.child')? 'text-blue-700 dark:text-blue-300' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-white transition-colors'; ?>">
+												<?php echo $sub2Item['name']; ?>
+											</a>
+											<?php } ?>
+										</div>
+										<?php } ?>
+										<?php } ?>
+								</div>
+								<?php } ?>
+								<?php } ?>
+								<!--{hook my.header_inc_menu_after.htm}-->
+							</div>
+
+							<!-- Down Arrow -->
+							<div id="nav-down-arrow"
+								class="absolute -bottom-2 left-0 right-0 h-8 bg-gradient-to-t from-gray-50/95 dark:from-slate-900/95 to-transparent z-10 flex items-center justify-center cursor-pointer opacity-0 pointer-events-none transition-opacity duration-300 rounded-b-xl">
+								<svg class="w-5 h-5 text-blue-500 animate-bounce" fill="none" stroke="currentColor"
+									viewBox="0 0 24 24">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+										d="M19 9l-7 7-7-7"></path>
+								</svg>
+							</div>
+						</nav>
+					</div>
+				</aside>

@@ -1,0 +1,14 @@
+{
+    "name": "Test Parent Theme",
+    "dir": "test_parent",
+    "version": "1.0.0",
+    "brief": "A base theme for testing parent-child relationships.",
+    "author": "WellCMS Team",
+    "domain": "http://wellcms.com",
+    "installed": 0,
+    "enable": 0,
+    "type": 2,
+    "dependencies": {
+        "core": "3.0"
+    }
+}

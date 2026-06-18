@@ -1,0 +1,158 @@
+<!-- Header -->
+<header class="relative w-full z-50 transition-all duration-300">
+	<!-- Background Layer (To avoid backdrop-filter trapping children) -->
+	<div class="absolute inset-0 glass-header -z-10"></div>
+
+	<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+		<div class="flex items-center h-16 relative">
+			<!-- Navigation Backdrop (Mobile Only) -->
+			<div id="nav-backdrop"
+				class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm opacity-0 hidden transition-opacity duration-300 z-[60]">
+			</div>
+
+			<!-- Mobile Hamburger (Left) -->
+			<div class="flex md:hidden items-center absolute left-0 z-[65]">
+				<button id="mobile-menu-toggle"
+					class="p-2 text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-colors focus:outline-none">
+					<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+							d="M4 6h16M4 12h16M4 18h16"></path>
+					</svg>
+				</button>
+			</div>
+
+			<!-- Logo Section (PC: Left, Mobile: Absolute Center) -->
+			<div class="flex items-center md:static absolute left-1/2 -translate-x-1/2 md:translate-x-0 h-16 z-10">
+				<a href="<?php echo $view->get('url_index', '/');?>"
+					class="text-2xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-blue-400 dark:to-indigo-400 whitespace-nowrap">
+					<img src="<?php echo $viewPath;?>image/logo.png" alt="WellCMS 3.0" class="h-8">
+				</a>
+			</div>
+
+			<!-- Unified Navigation (SEO Optimized) -->
+			<nav id="main-nav"
+				class="fixed inset-y-0 left-0 w-72 h-full bg-white dark:bg-slate-900 shadow-2xl transform -translate-x-full transition-transform duration-300 ease-in-out z-[70] md:relative md:translate-x-0 md:inset-auto md:w-auto md:h-auto md:bg-transparent md:dark:bg-transparent md:flex md:items-center md:space-x-8 md:ml-8 md:shadow-none text-left">
+				<!-- Sidebar Header (Mobile Only) -->
+				<div
+					class="p-6 md:hidden flex items-center justify-between border-b dark:border-gray-800 mb-4 bg-white dark:bg-slate-900">
+					<span
+						class="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-blue-400 dark:to-indigo-400"><?php echo $view->get('sitename');?></span>
+					<button id="nav-close"
+						class="p-2 text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white">
+						<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+								d="M6 18L18 6M6 6l12 12"></path>
+						</svg>
+					</button>
+				</div>
+
+				<!-- Links Container -->
+				<div class="flex flex-col md:flex-row p-6 md:p-0 space-y-4 md:space-y-0 md:items-center md:space-x-8">
+
+					<?php foreach($view->get('navigation', []) as $key => $item) { ?>
+					<?php if ($item['hide']) continue; ?>
+					<?php if (!empty($item['sublist'])) { ?>
+					<!-- Features with Submenu -->
+					<div class="relative group">
+						<button
+							class="flex items-center justify-between w-full md:w-auto text-lg md:text-base font-medium text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-white focus:outline-none transition-colors group"
+							onclick="if(window.innerWidth < 768) this.nextElementSibling.classList.toggle('hidden')">
+							<span><?php echo $item['name'];?></span>
+							<svg class="w-5 h-5 md:w-4 md:h-4 ml-1 opacity-50 group-hover:opacity-100 transition-all duration-200"
+								fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+									d="M19 9l-7 7-7-7"></path>
+							</svg>
+						</button>
+						<!-- Submenu Dropdown (PC: Hover, Mobile: Click/Accordion) -->
+						<div
+							class="hidden md:block md:absolute left-0 mt-2 w-52 md:transition-all md:duration-200 md:opacity-0 md:invisible md:translate-y-2 md:group-hover:opacity-100 md:group-hover:visible md:group-hover:translate-y-0 z-50">
+							<div
+								class="mt-2 md:mt-0 bg-slate-50 dark:bg-slate-800/40 md:bg-white md:dark:bg-slate-800 md:rounded-xl md:shadow-2xl md:border md:border-gray-100 md:dark:border-gray-700 overflow-hidden p-2 md:p-1 space-y-1 md:space-y-0 border-l-2 md:border-l-0 border-gray-100 dark:border-gray-800 ml-4 md:ml-0">
+								<?php foreach($item['sublist'] as $subKey => $subItem) { ?>
+								<?php if ($subItem['hide']) continue; ?>
+								<a href="<?php echo $subItem['url'];?>"
+									<?php if($subItem['jump']) {echo 'target="_blank"';}?>
+									title="<?php echo $subItem['name'];?>"
+									class="block px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 md:hover:bg-gray-100 md:dark:hover:bg-white/10 md:rounded-lg transition-colors">
+									<?php echo $subItem['name'];?>
+								</a>
+								<?php } ?>
+							</div>
+						</div>
+					</div>
+					<?php } else { ?>
+					<a href="<?php echo $item['url'];?>" <?php if($item['jump']) {echo 'target="_blank"';}?>
+						title="<?php echo $item['name'];?>"
+						class="text-lg md:text-base font-medium text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-white transition-colors">
+						<?php echo $item['name'];?>
+					</a>
+					<?php } ?>
+					<?php } ?>
+				</div>
+			</nav>
+
+			<!-- Actions (Right) -->
+			<div class="flex items-center space-x-2 ml-auto">
+				<!--{hook header_nav_inc_start.htm}-->
+				<!-- <a href="../user/messages.html"
+					class="relative p-2 text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-colors">
+					<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+							d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9">
+						</path>
+					</svg>
+					<span
+						class="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-red-500 ring-2 ring-white dark:ring-slate-900"></span>
+				</a> -->
+				<button onclick="wellcms.toggleDarkMode()"
+					class="p-2 text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white">
+					<span class="dark:hidden">
+						<svg class="w-5 h-5 text-gray-600 dark:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path>
+						</svg>
+					</span>
+					<span class="hidden dark:inline">
+						<svg class="w-5 h-5 text-yellow-400 hidden dark:block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path>
+						</svg>
+					</span>
+				</button>
+				<!--{hook header_nav_inc_center.htm}-->
+				<?php if (empty($view->get('user.id'))){?>
+				<!-- Not logged in -->
+				<!--{hook header_nav_inc_center_user_before.htm}-->
+				<a href="<?php echo $view->get('user.signup.url');?>" rel="nofollow"
+					class="hidden md:block flex items-center space-x-2 text-sm font-medium hover:text-blue-600 px-4 py-2 md:px-5 md:py-2.5 border border-stroke hover:border-gray-500 bg-gray-100 dark:bg-white/5 hover:text-blue-500 dark:hover:text-blue-400 rounded-lg">
+					<span><?php echo $view->get('user.signup.label');?></span>
+				</a>
+				<!--{hook header_nav_inc_center_user_center.htm}-->
+				<a href="<?php echo $view->get('user.signin.url');?>" rel="nofollow"
+					class="flex items-center space-x-2 text-sm text-white font-medium border border-blue-600 bg-blue-600 hover:bg-blue-800 rounded-lg text-sm px-4 py-2 md:px-5 md:py-2.5 dark:bg-blue-600 dark:hover:bg-blue-700">
+					<span><?php echo $view->get('user.signin.label');?></span>
+				</a>
+				<!--{hook header_nav_inc_center_user_after.htm}-->
+				<?php } else { ?>
+				<!-- logged in -->
+				<script>
+					window.__CURRENT_USER__ = '<?= json_encode(['administer' => $view->get('user.administer', 0), 'username' => $view->get('user.username'), 'avatar' => $view->get('user.avatar_url'), 'groupname' => $view->get('user.groupname'), 'links' => ['home' => ['name' => $view->get('user.links.home.name'), 'url' => $view->get('user.links.home.url')], 'profile' => ['name' => $view->get('user.links.profile.name'), 'url' => $view->get('user.links.profile.url')], 'admin' => ['name' => $view->get('user.links.admin.name'), 'url' => $view->get('user.links.admin.url')], 'logout' => ['name' => $view->get('user.links.logout.name'), 'url' => $view->get('user.links.logout.url')]]], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP); ?>';
+				</script>
+				<!--{hook header_nav_inc_center_user_logged_before.htm}-->
+				<button onclick="wellcms.showUserMenu(this, window.__CURRENT_USER__)"
+					class="relative focus:outline-none">
+					<div
+						class="h-9 w-9 rounded-full bg-gradient-to-r from-blue-500 to-indigo-600 p-0.5 shadow-md hover:shadow-lg transition-all duration-200 hover:scale-105">
+						<img class="my-avatar h-full w-full rounded-full border-2 border-white dark:border-slate-900 bg-white"
+							src="<?php echo $view->get('user.avatar_url');?>"
+							alt="<?php echo $view->get('user.username');?>">
+						<span
+							class="absolute bottom-0 right-0 block h-2.5 w-2.5 rounded-full bg-green-400 ring-2 ring-white dark:ring-slate-900"></span>
+					</div>
+				</button>
+				<!--{hook header_nav_inc_center_user_logged_after.htm}-->
+				<?php } ?>
+				<!--{hook header_nav_inc_end.htm}-->
+			</div>
+		</div>
+	</div>
+</header>

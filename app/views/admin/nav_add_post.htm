@@ -1,0 +1,227 @@
+<?php use App\Core\Compile;?>
+<?php include Compile::include(APP_PATH.'app/views/admin/header.inc.htm');?>
+
+<!-- Breadcrumbs -->
+<div class="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
+	<nav aria-label="Breadcrumb">
+		<ol class="flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400">
+			<li>
+				<a href="<?php echo $view->get('breadcrumb.home.url');?>" class="hover:text-blue-600 transition-colors">
+					<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+							d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+					</svg>
+				</a>
+			</li>
+			<li><span class="mx-1">/</span></li>
+			<li>
+				<a href="<?php echo $view->e('breadcrumb.list.url');?>" class="hover:text-blue-600 transition-colors">
+					<?php echo $view->e('breadcrumb.list.name');?>
+				</a>
+			</li>
+			<li><span class="mx-1">/</span></li>
+			<li class="font-bold text-gray-900 dark:text-white">
+				<?php echo $view->e('breadcrumb.title.name');?>
+			</li>
+		</ol>
+	</nav>
+</div>
+
+<div class="flex justify-center w-full px-4 sm:px-0">
+	<div class="w-full max-w-4xl glass-panel rounded-2xl p-8 shadow-2xl transition-all duration-300">
+		<h2 class="text-2xl font-black mb-8 text-gray-900 dark:text-white flex items-center tracking-tight">
+			<span
+				class="p-2.5 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-xl mr-4 shadow-inner">
+				<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+						d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101" />
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+						d="M10.172 13.828a4 4 0 015.656 0l4-4a4 4 0 10-5.656-5.656l-1.102 1.101" />
+				</svg>
+			</span>
+			<?php echo $view->e('breadcrumb.title.name');?>
+		</h2>
+
+		<form class="ajax-form space-y-6" action="<?php echo $view->get('action');?>" method="post" id="form">
+			<input type="hidden" name="_csrf_token" value="<?php echo $view->e('csrf_token');?>">
+
+			<!--{hook admin_nav_add_post_form_before.htm}-->
+			<!-- Type Selection -->
+			<div class="space-y-2">
+				<label
+					class="block text-sm font-bold text-gray-700 dark:text-gray-300 uppercase tracking-widest text-[10px]">
+					<?php echo $view->get('language.type');?>
+				</label>
+				<div class="grid grid-cols-2 gap-4">
+					<label
+						class="flex items-center p-3.5 rounded-xl border border-gray-100 dark:border-gray-800 bg-white/30 dark:bg-white/5 hover:bg-white/50 dark:hover:bg-white/10 transition-all cursor-pointer group">
+						<input type="radio" name="type" value="0"
+							class="w-5 h-5 text-blue-600 border-gray-300 focus:ring-blue-500"
+							<?php if (0 === (int)$view->e('result.type')) {echo 'checked';} ?>
+							onchange="toggleParentSelector(this.value)">
+						<span
+							class="ml-3 text-sm font-bold text-gray-700 dark:text-gray-300 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+							<?php echo $view->get('language.primary_menu');?>
+						</span>
+					</label>
+					<label
+						class="flex items-center p-3.5 rounded-xl border border-gray-100 dark:border-gray-800 bg-white/30 dark:bg-white/5 hover:bg-white/50 dark:hover:bg-white/10 transition-all cursor-pointer group">
+						<input type="radio" name="type" value="1"
+							class="w-5 h-5 text-blue-600 border-gray-300 focus:ring-blue-500"
+							<?php if (1 === (int)$view->e('result.type')) {echo 'checked';} ?>
+							onchange="toggleParentSelector(this.value)">
+						<span
+							class="ml-3 text-sm font-bold text-gray-700 dark:text-gray-300 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+							<?php echo $view->e('language.secondary_menu');?>
+						</span>
+					</label>
+				</div>
+			</div>
+
+			<!-- Parent Selection -->
+			<div id="parent-selector"
+				class="space-y-2 <?php if (0 === (int)$view->e('result.type')) {echo 'hidden';} ?>">
+				<label
+					class="block text-sm font-bold text-gray-700 dark:text-gray-300 uppercase tracking-widest text-[10px]">
+					<?php echo $view->get('language.parent_id');?>
+				</label>
+				<div class="relative group">
+					<select name="parent_id"
+						class="w-full px-4 py-3.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white/50 dark:bg-slate-800/50 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-sm font-medium text-gray-900 dark:text-white appearance-none cursor-pointer">
+						<option value="0"><?php echo $view->e('language.none');?></option>
+						<?php if ($primaryNavList = $view->get('primary_nav_list')) { foreach($primaryNavList as $item) { ?>
+						<option value="<?php echo $item['id'];?>"
+							<?php if ($item['id'] == $view->e('result.parent_id')) {echo 'selected';} ?>>
+							<?php echo htmlspecialchars($item['name']);?>
+						</option>
+						<?php }} ?>
+					</select>
+					<div class="absolute inset-y-0 right-4 flex items-center pointer-events-none opacity-50">
+						<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+						</svg>
+					</div>
+				</div>
+			</div>
+
+			<!-- Navigation Name -->
+			<div class="space-y-2">
+				<label
+					class="block text-sm font-bold text-gray-700 dark:text-gray-300 uppercase tracking-widest text-[10px]">
+					<?php echo $view->e('language.navigation_name');?>
+				</label>
+				<div class="relative group">
+					<input type="text" name="name" required
+						class="w-full pl-4 pr-4 py-3.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white/50 dark:bg-slate-800/50 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all font-bold text-gray-900 dark:text-white"
+						placeholder="<?php echo $view->e('language.navigation_name');?>"
+						value="<?php echo $view->e('result.name');?>">
+				</div>
+			</div>
+
+			<!-- Navigation Link -->
+			<div class="space-y-2">
+				<label
+					class="block text-sm font-bold text-gray-700 dark:text-gray-300 uppercase tracking-widest text-[10px]">
+					<?php echo $view->e('language.navigation_link');?>
+				</label>
+				<div class="relative group">
+					<input type="text" name="url" required
+						class="w-full pl-4 pr-4 py-3.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white/50 dark:bg-slate-800/50 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all font-mono text-xs text-blue-600 dark:text-blue-400"
+						placeholder="http://..." value="<?php echo $view->e('result.url');?>">
+				</div>
+			</div>
+
+			<!-- Switches -->
+			<div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+				<div class="flex items-center justify-between p-4 rounded-xl border border-gray-100 dark:border-gray-800 bg-white/30 dark:bg-white/5 hover:bg-white/50 dark:hover:bg-white/10 transition-all cursor-pointer group"
+					onclick="toggleSwitch('jump')">
+					<div class="flex items-center space-x-3">
+						<div
+							class="p-2 rounded-lg bg-gray-100 dark:bg-gray-700 group-hover:bg-green-50 dark:group-hover:bg-green-900/20 transition-colors">
+							<svg class="w-4 h-4 text-gray-500 dark:text-gray-400 group-hover:text-green-500" fill="none"
+								stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+									d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+							</svg>
+						</div>
+						<span
+							class="text-sm font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider"><?php echo $view->e('language.jump');?></span>
+					</div>
+					<label class="relative inline-flex items-center cursor-pointer" onclick="event.stopPropagation()">
+						<input type="checkbox" id="jump" name="jump" value="1" class="sr-only peer"
+							<?php if ($view->e('result.jump')) {echo 'checked';} ?>>
+						<div
+							class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-500">
+						</div>
+					</label>
+				</div>
+
+				<div class="flex items-center justify-between p-4 rounded-xl border border-gray-100 dark:border-gray-800 bg-white/30 dark:bg-white/5 hover:bg-white/50 dark:hover:bg-white/10 transition-all cursor-pointer group"
+					onclick="toggleSwitch('hide')">
+					<div class="flex items-center space-x-3">
+						<div
+							class="p-2 rounded-lg bg-gray-100 dark:bg-gray-700 group-hover:bg-amber-50 dark:group-hover:bg-amber-900/20 transition-colors">
+							<svg class="w-4 h-4 text-gray-500 dark:text-gray-400 group-hover:text-amber-500" fill="none"
+								stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+									d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268-2.943-9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+							</svg>
+						</div>
+						<span
+							class="text-sm font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider"><?php echo $view->e('language.hide');?></span>
+					</div>
+					<label class="relative inline-flex items-center cursor-pointer" onclick="event.stopPropagation()">
+						<input type="checkbox" id="hide" name="hide" value="1" class="sr-only peer"
+							<?php if ($view->e('result.hide')) {echo 'checked';} ?>>
+						<div
+							class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500">
+						</div>
+					</label>
+				</div>
+			</div>
+
+			<!--{hook admin_nav_add_post_form_after.htm}-->
+
+			<!-- Submit Button -->
+			<div class="pt-6">
+				<button type="submit"
+					class="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white font-black uppercase tracking-widest text-xs rounded-xl shadow-lg shadow-blue-500/30 transition-all transform active:scale-[0.98] flex items-center justify-center space-x-2">
+					<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+					</svg>
+					<span><?php echo $view->e('language.submit');?></span>
+				</button>
+			</div>
+		</form>
+	</div>
+</div>
+
+<?php include Compile::include(APP_PATH . 'app/views/admin/footer.inc.htm');?>
+<script>
+	new GlobalFormHandler(".ajax-form", {
+		loadingText: "Submitting...",
+		modalSize: "md",
+		modalPosition: "center",
+		timeout: 2
+	});
+
+	function toggleSwitch(id) {
+		const el = document.getElementById(id);
+		el.checked = !el.checked;
+	}
+
+	function toggleParentSelector(type) {
+		const selector = document.getElementById('parent-selector');
+		if (parseInt(type) === 1) {
+			selector.classList.remove('hidden');
+		} else {
+			selector.classList.add('hidden');
+		}
+	}
+
+	/*30分钟token失效，刷新页面*/
+	setTimeout(() => {
+		window.location.reload();
+	}, 18000000);
+</script>
+<!--{hook admin_nav_add_post_end.htm}-->

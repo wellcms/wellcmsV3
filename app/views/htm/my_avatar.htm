@@ -1,0 +1,83 @@
+<?php use App\Core\Compile;?>
+<?php include Compile::include(APP_PATH.'app/views/htm/my.header.inc.htm');?>
+<main class="flex-1 space-y-6">
+    <!-- Integrated Panel: Tabs + Content -->
+    <div class="glass-panel rounded-2xl overflow-hidden">
+        <!-- Sub Navigation Tabs (Integrated Header) -->
+        <div class="border-b border-gray-100 dark:border-gray-700/50">
+            <nav class="flex overflow-x-auto no-scrollbar scroll-smooth flex-nowrap">
+                <?php foreach ($view->get('menu.profiles.children', []) as $key => $item) { ?>
+                <a href="<?php echo $item['url']; ?>"
+                    class="<?php if ($item['child'] == $view->get('menu_fixed.child')){echo 'border-blue-500 text-blue-600 dark:text-blue-400';}else{echo 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300';}?> whitespace-nowrap px-6 py-3 border-b-2 font-medium text-base transition-colors"><?php echo $item['name']; ?></a>
+                <?php } ?>
+            </nav>
+        </div>
+
+        <!-- Content Area -->
+        <div class="p-8">
+            <div class="flex items-center flex-col md:flex-row">
+                <div class="relative group cursor-pointer" id="avatar-container">
+                    <img class="my-avatar h-32 w-32 rounded-full border-4 border-white dark:border-gray-800 shadow-xl transition-transform group-hover:scale-105"
+                        src="<?php echo $view->e('user.avatar_url', ''); ?>"
+                        alt="<?php echo $view->get('user.username', ''); ?>">
+                    <div
+                        class="absolute inset-0 flex items-center justify-center bg-black/40 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
+                        <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z">
+                            </path>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                        </svg>
+                    </div>
+                </div>
+                <div class="mt-6 md:mt-0 md:ml-8 flex-1 w-full">
+                    <div id="avatar-drop-zone" data-upload-url="<?php echo $view->get('action', ''); ?>"
+                        data-csrf="<?php echo $view->get('csrf_token', ''); ?>"
+                        class="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-2xl p-8 flex flex-col items-center justify-center text-center hover:bg-gray-50 dark:hover:bg-white/5 transition-all cursor-pointer group">
+                        <div
+                            class="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-full mb-3 group-hover:scale-110 transition-transform">
+                            <svg class="w-8 h-8 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12">
+                                </path>
+                            </svg>
+                        </div>
+                        <p class="text-base font-medium text-gray-700 dark:text-gray-300 text-blue-600"><?php echo $view->get('language.avatar_drag_drop_click_upload'); ?></p>
+                        <p class="text-xs text-gray-500 mt-1"><?php echo $view->get('language.avatar_file_types'); ?></p>
+
+                        <!-- Progress Bar (Hidden by default) -->
+                        <div id="avatar-progress-container" class="w-full max-w-xs mt-4 hidden">
+                            <div class="h-1.5 w-full bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                                <div id="avatar-progress-bar" class="h-full bg-blue-600 transition-all duration-300"
+                                    style="width: 0%"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <input type="file" id="avatar-input" class="hidden" accept="image/*">
+                </div>
+            </div>
+        </div>
+    </div>
+</main>
+<?php include Compile::include(APP_PATH . 'app/views/htm/my.footer.inc.htm');?>
+
+<script ajax-eval="true">
+    document.addEventListener('DOMContentLoaded', function () {
+        if (window.wellcms) {
+            wellcms.initAvatarUpload({
+                container: '#avatar-container',
+                img: '.my-avatar',
+                dropZone: '#avatar-drop-zone',
+                input: '#avatar-input',
+                progress: '#avatar-progress-bar',
+                progressContainer: '#avatar-progress-container'
+            });
+        }
+    });
+
+    /*30分钟token失效，刷新页面*/
+    setTimeout(() => {
+        window.location.reload();
+    }, 1800000);
+</script>

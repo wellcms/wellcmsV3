@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+
+  <head>
+
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge,chrome=1">
+    <meta http-equiv="Cache-Control" content="no-transform">
+    <meta http-equiv="Cache-Control" content="no-siteapp">
+    <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+    <meta name="referrer" content="origin-when-cross-origin">
+    <meta name="applicable-device" content="pc,mobile">
+    <meta name="MobileOptimized" content="width">
+    <meta name="HandheldFriendly" content="true">
+    <meta name="renderer" content="webkit">
+    <meta name="keywords" content="<?php echo $view->get('code')?>">
+    <meta name="description" content="<?php echo $view->get('code')?>">
+    <title><?php echo $view->get('data.title')?></title>
+
+    <?php $viewPath = $view->get('website.current.view'); ?>
+	<?php $staticVersion = $view->get('website.static_version'); ?>
+    <link rel="shortcut icon" href="<?php echo $viewPath;?>image/favicon.ico">
+    <link rel="icon" sizes="32x32" href="<?php echo $viewPath;?>image/favicon.ico">
+    <link rel="Bookmark" href="<?php echo $viewPath;?>image/favicon.ico">
+
+    <link rel="stylesheet" href="<?php echo $viewPath;?>css/tailwind.min.css<?php echo $staticVersion; ?>">
+
+    <link href="https://unpkg.com/element-plus/dist/index.css" rel="stylesheet">
+  </head>
+
+  <body>
+    <div class="grid h-screen place-content-center bg-white px-4">
+      <div class="text-center">
+        <div class="ajax-body">
+          <p class="text-base mt-4 text-gray-900"><?php echo $view->get('message')?></p>
+        </div>
+
+        <?php $actionLinks = $view->get('data.action_links') ?? []; ?>
+        <?php if (!empty($actionLinks)) { ?>
+          <div class="mt-6 space-y-3">
+            <?php foreach ($actionLinks as $link) { ?>
+              <a href="<?php echo htmlspecialchars($link['url'] ?? '/'); ?>"
+                <?php if (!empty($link['target'])) { ?>target="<?php echo htmlspecialchars($link['target']); ?>"<?php } ?>
+                class="inline-block rounded bg-indigo-600 px-5 py-3 text-sm font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring">
+                <?php echo htmlspecialchars($link['label'] ?? 'Go Back Home'); ?>
+              </a>
+            <?php } ?>
+          </div>
+        <?php } else { ?>
+          <?php $redirectUrl = $view->get('data.redirect.url'); ?>
+          <?php if ($redirectUrl) { ?>
+            <a id="msg-action-link" href="<?php echo htmlspecialchars($redirectUrl); ?>"
+              class="mt-6 inline-block rounded bg-indigo-600 px-5 py-3 text-sm font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring">
+              Go Back Home
+            </a>
+            <script ajax-eval="true">
+              (function() {
+                var isInModal = !!document.getElementById('wellcms-global-dialog');
+                var link = document.getElementById('msg-action-link');
+                if (isInModal && link) {
+                  var btn = document.createElement('button');
+                  btn.className = link.className;
+                  btn.innerHTML = 'Refresh Page';
+                  btn.onclick = function() { window.location.reload(); };
+                  link.parentNode.replaceChild(btn, link);
+                }
+              })();
+            </script>
+          <?php } ?>
+        <?php } ?>
+      </div>
+    </div>
+  </body>
+
+  <?php $redirectUrl = $view->get('data.redirect.url'); ?>
+  <?php if ($redirectUrl && '' !== $view->get('data.redirect.delay')) { ?>
+  <script ajax-eval="true">
+    (function() {
+      var isInModal = !!document.getElementById('wellcms-global-dialog');
+      if (!isInModal) {
+        setTimeout(function () {
+          window.location = <?php echo json_encode($redirectUrl); ?>;
+        }, <?php echo json_encode((int)$view->get('data.redirect.delay')); ?> * 1000);
+      }
+    })();
+  </script>
+  <?php } ?>
+
+</html>

@@ -1,0 +1,103 @@
+<?php use App\Core\Compile;?>
+<?php include Compile::include(APP_PATH.'app/views/admin/header.inc.htm');?>
+
+<section id="main-content" class="flex-1 w-full max-w-7xl mx-auto px-6">
+    <div class="max-w-4xl mx-auto mt-8">
+        <div
+            class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl overflow-hidden border border-gray-200 dark:border-gray-700">
+            <!-- Header -->
+            <div class="p-8 bg-gradient-to-r from-blue-600 to-indigo-700 text-white">
+                <h2 class="text-3xl font-bold flex items-center">
+                    <svg class="w-8 h-8 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15">
+                        </path>
+                    </svg>
+                    <?php echo $view->e('language.title');?>
+                </h2>
+                <p class="mt-2 text-blue-100 opacity-90"><?php echo $view->raw('official_message');?></p>
+            </div>
+
+            <!-- Content -->
+            <div class="p-8 space-y-8">
+                <!-- Version Comparison -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div
+                        class="p-6 bg-gray-50 dark:bg-gray-700/50 rounded-xl border border-dashed border-gray-300 dark:border-gray-600">
+                        <span
+                            class="text-sm text-gray-500 dark:text-gray-400 uppercase font-semibold"><?php echo $view->e('language.current_version');?></span>
+                        <div class="text-2xl font-bold mt-1 text-gray-800 dark:text-white">
+                            <?php echo $view->e('software_version');?></div>
+                    </div>
+                    <div
+                        class="p-6 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-200 dark:border-blue-800 relative overflow-hidden">
+                        <span
+                            class="text-sm text-blue-600 dark:text-blue-400 uppercase font-semibold"><?php echo $view->e('language.official_version');?></span>
+                        <div class="text-2xl font-bold mt-1 text-blue-700 dark:text-blue-300">
+                            <?php echo $view->e('official_version');?></div>
+                        <?php if ($view->get('upgrade_available')) { ?>
+                        <div class="absolute top-2 right-2 flex h-3 w-3">
+                            <span
+                                class="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                            <span class="relative inline-flex rounded-full h-3 w-3 bg-blue-500"></span>
+                        </div>
+                        <?php } ?>
+                    </div>
+                </div>
+
+                <!-- Status Feedback -->
+                <?php if ($view->get('upgrade_available')) { ?>
+                <div
+                    class="bg-yellow-50 dark:bg-yellow-900/20 p-4 rounded-xl border border-yellow-200 dark:border-yellow-800 flex items-start">
+                    <svg class="w-6 h-6 text-yellow-600 dark:text-yellow-400 mr-3 mt-0.5" fill="none"
+                        stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                    <div>
+                        <p class="text-yellow-800 dark:text-yellow-200 font-medium"><?php echo $view->e('language.upgrade_ready_title');?></p>
+                        <p class="text-sm text-yellow-700 dark:text-yellow-300 mt-1"><?php echo $view->e('language.upgrade_ready_desc');?></p>
+                    </div>
+                </div>
+
+                <div class="flex justify-center pt-4">
+                    <button id="btn-upgrade" onclick="executeUpgrade()"
+                        class="px-12 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-lg font-bold rounded-full hover:from-blue-700 hover:to-indigo-700 transition-all transform hover:scale-105 shadow-xl shadow-blue-500/20">
+                        <?php echo $view->e('language.upgrade_start_now');?>
+                    </button>
+                </div>
+                <?php } else { ?>
+                <div class="text-center py-12">
+                    <div
+                        class="inline-flex p-4 bg-green-100 dark:bg-green-900/30 rounded-full text-green-600 dark:text-green-400 mb-4">
+                        <svg class="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7">
+                            </path>
+                        </svg>
+                    </div>
+                    <h3 class="text-xl font-bold dark:text-white"><?php echo $view->e('language.upgrade_latest_title');?></h3>
+                    <p class="text-gray-500 dark:text-gray-400 mt-2"><?php echo $view->e('language.upgrade_latest_desc');?></p>
+                </div>
+                <?php } ?>
+            </div>
+        </div>
+    </div>
+</section>
+
+<script>
+    function executeUpgrade() {
+        wellcms.confirm({
+            title: "<?php echo $view->e('language.upgrade_ready_title');?>",
+            body: "<?php echo $view->e('language.upgrade_confirm_msg');?>",
+            confirmText: "<?php echo $view->e('language.upgrade_start_now');?>"
+        }, function() {
+            var btn = document.getElementById('btn-upgrade');
+            btn.disabled = true;
+            btn.innerText = "<?php echo $view->e('language.upgrade_processing');?>";
+            btn.classList.add('opacity-50', 'cursor-not-allowed');
+            location.href = "<?php echo $view->get('upgrade_url');?>";
+        });
+    }
+</script>
+
+<?php include Compile::include(APP_PATH . 'app/views/admin/footer.inc.htm');?>

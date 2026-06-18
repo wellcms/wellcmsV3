@@ -1,0 +1,76 @@
+<?php use App\Core\Compile;?>
+<?php include Compile::include(APP_PATH.'app/views/htm/my.header.inc.htm');?>
+
+<!-- Main Content -->
+<main class="flex-1 min-w-0">
+
+    <!-- Welcome Banner / Header Card -->
+    <div class="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-700 p-8 text-white shadow-2xl mb-8">
+        <div class="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-white/10 blur-3xl transition-transform duration-700 hover:scale-110"></div>
+        <div class="absolute -left-10 -bottom-10 h-40 w-40 rounded-full bg-purple-400/20 blur-2xl"></div>
+
+        <div class="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+            <div class="space-y-2">
+                <!--{hook manage_dashboard_banner_start.htm}-->
+                <h1 class="text-3xl md:text-4xl font-extrabold tracking-tight">
+                    <?php echo $view->get('language.manage_dashboard'); ?>
+                </h1>
+                <p class="text-purple-100/80 text-lg font-medium max-w-md">
+                    <?php echo $view->get('language.manage_brief_introduction'); ?>
+                </p>
+                <!--{hook manage_dashboard_banner_end.htm}-->
+            </div>
+
+            <div class="flex flex-wrap gap-3">
+                <!--{hook manage_dashboard_banner_action_before.htm}-->
+                <!--{hook manage_dashboard_banner_action_after.htm}-->
+            </div>
+        </div>
+    </div>
+
+    <!--{hook manage_dashboard_content_before.htm}-->
+
+    <div class="space-y-8">
+        <!--{hook manage_dashboard_left_before.htm}-->
+
+        <!-- Quick Access (Rendered only when data exists) -->
+        <?php if($quick_access = $view->get('quick_access', [])) { ?>
+        <!--{hook manage_dashboard_quick_access_start.htm}-->
+        <h3 class="font-bold text-xl uppercase tracking-tight flex items-center">
+            <div class="w-2 h-6 bg-purple-600 rounded-full mr-3"></div>
+            <?php echo $view->get('language.quick_access'); ?>
+        </h3>
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <?php foreach($quick_access as $key => $item) { ?>
+            <a href="<?php echo $item['url']; ?>" class="glass-panel p-4 rounded-2xl border border-gray-100 dark:border-white/5 hover:border-purple-500/30 hover:bg-purple-50/30 dark:hover:bg-white/5 transition-all group flex items-center">
+                <div class="w-10 h-10 rounded-xl <?php echo $item['color'] ?? 'bg-purple-100 text-purple-600'; ?> flex items-center justify-center mr-3 group-hover:scale-110 transition-transform">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="<?php echo $item['icon'] ?? 'M13 10V3L4 14h7v7l9-11h-7z'; ?>"></path>
+                    </svg>
+                </div>
+                <div>
+                    <div class="font-bold text-gray-900 dark:text-white text-sm"><?php echo $item['name']; ?></div>
+                    <div class="text-xs text-gray-500 dark:text-gray-400"><?php echo $item['desc'] ?? ''; ?></div>
+                </div>
+            </a>
+            <?php } ?>
+        </div>
+        <!--{hook manage_dashboard_quick_access_end.htm}-->
+        <?php } ?>
+
+        <!-- Plugin / Custom Area -->
+        <!--{hook manage_dashboard_plugins_before.htm}-->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <!--{hook manage_dashboard_forum_start.htm}-->
+            <!--{hook manage_dashboard_forum_end.htm}-->
+        </div>
+        <!--{hook manage_dashboard_plugins_after.htm}-->
+
+        <!--{hook manage_dashboard_left_after.htm}-->
+    </div>
+
+    <!--{hook manage_dashboard_content_after.htm}-->
+</main>
+
+<?php include Compile::include(APP_PATH . 'app/views/htm/my.footer.inc.htm');?>
+<!--{hook manage_dashboard_end.htm}-->

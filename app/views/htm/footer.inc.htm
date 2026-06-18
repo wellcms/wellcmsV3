@@ -1,0 +1,63 @@
+<!--{hook footer_inc_start.htm}-->
+
+<?php if (defined('DEBUG') && DEBUG > 1){ ?>
+<div class="w-full py-4 bg-gray-100 dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 font-mono text-xs">
+	<div class="max-w-7xl mx-auto px-4">
+		<div class="break-all text-gray-500 dark:text-gray-400">
+			<p class="font-bold">Debug Info:</p>
+			<p>Processed Time:<?php echo $view->e('website.running.processed_time'); ?></p>
+			<ul class="list-disc pl-4 mt-2 space-y-1">
+				<?php foreach ($view->get('website.running.sqls') as $SQLString) { ?>
+				<li><?php echo htmlspecialchars($SQLString); ?></li>
+				<?php } ?>
+			</ul>
+			<br>
+			<p>
+				_REQUEST:<br>
+				<?php print_r($view->get('website.running.request')); ?>
+			</p>
+		</div>
+	</div>
+</div>
+<?php } ?>
+
+<!--{hook footer_inc_before.htm}-->
+
+<footer class="bg-white dark:bg-gray-800 py-4 bottom-0 w-full">
+	<div class="max-w-7xl mx-auto">
+		<div class="flex justify-between items-center text-sm px-3">
+			<div class="text-left">
+				<?php echo $view->get('website.copyright'); ?>
+			</div>
+
+			<div class="grid grid-cols-1">
+
+				<!--{hook footer_inc_processed_before.htm}-->
+
+				<div class="text-right">
+					Processed:
+					<b>
+						<?php echo substr($view->get('website.running.processed_time'), 0, 5); ?>
+					</b>, SQL:
+					<b>
+						<?php echo $view->get('website.running.sql_count'); ?>
+					</b>
+				</div>
+
+				<!--{hook footer_inc_processed_after.htm}-->
+			</div>
+		</div>
+	</div>
+</footer>
+
+<!--{hook footer_inc_end.htm}-->
+
+<script src="<?php echo $viewPath;?>js/main.js<?php echo $staticVersion; ?>"></script>
+
+<!--{hook footer_inc_js.htm}-->
+
+<!--{hook footer_inc_js.htm}-->
+
+</body>
+
+</html>

@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="<?php echo $view->get('locale', 'zh');?>">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><?php echo $view->e('website.header.title');?></title>
+    <meta name="robots" content="noindex, nofollow">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: #f9fafb;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+        }
+        .card {
+            max-width: 420px;
+            width: 100%;
+            background: #fff;
+            border-radius: 16px;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+            padding: 40px 32px;
+            text-align: center;
+        }
+        .icon {
+            width: 64px; height: 64px;
+            margin: 0 auto 24px;
+            background: #fffbeb;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .icon svg { width: 28px; height: 28px; color: #f59e0b; }
+        h1 {
+            font-size: 18px;
+            font-weight: 700;
+            color: #111827;
+            margin-bottom: 12px;
+        }
+        .warning {
+            font-size: 14px;
+            color: #6b7280;
+            line-height: 1.6;
+            margin-bottom: 24px;
+        }
+        .url-box {
+            background: #f3f4f6;
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 24px;
+            word-break: break-all;
+        }
+        .url-box p {
+            font-size: 13px;
+            color: #4b5563;
+            font-family: "SF Mono", Monaco, "Cascadia Code", monospace;
+        }
+        .btn {
+            display: block;
+            width: 100%;
+            padding: 14px;
+            border-radius: 12px;
+            font-size: 15px;
+            font-weight: 600;
+            text-decoration: none;
+            text-align: center;
+            cursor: pointer;
+            border: none;
+            transition: background 0.2s;
+        }
+        .btn-primary {
+            background: #111827;
+            color: #fff;
+            margin-bottom: 12px;
+        }
+        .btn-primary:hover { background: #374151; }
+        .btn-secondary {
+            background: transparent;
+            color: #6b7280;
+        }
+        .btn-secondary:hover { color: #374151; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="icon">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+            </svg>
+        </div>
+
+        <h1><?php echo $view->get('language.external_link_title');?></h1>
+
+        <p class="warning">
+            <?php echo $view->get('language.external_link_warning');?>
+        </p>
+
+        <div class="url-box">
+            <p><?php echo $view->e('target_url');?></p>
+        </div>
+
+        <a href="<?php echo $view->e('target_url');?>"
+           rel="nofollow noopener noreferrer"
+           class="btn btn-primary">
+            <?php echo $view->get('language.external_link_continue');?>
+        </a>
+
+        <a href="javascript:history.back()" class="btn btn-secondary">
+            <?php echo $view->get('language.cancel');?>
+        </a>
+    </div>
+</body>
+</html>

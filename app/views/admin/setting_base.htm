@@ -1,0 +1,263 @@
+<?php use App\Core\Compile;?>
+<?php include Compile::include(APP_PATH.'app/views/admin/header.inc.htm');?>
+
+<div class="flex justify-center w-full px-4 sm:px-0">
+	<div class="w-full max-w-4xl glass-panel rounded-2xl p-8 shadow-2xl">
+		<h2 class="text-2xl font-black mb-8 text-gray-900 dark:text-white flex items-center tracking-tight">
+			<span
+				class="p-2.5 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-xl mr-4 shadow-inner">
+				<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+						d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+						d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+				</svg>
+			</span>
+			<?php echo $view->get('language.base_setting');?>
+		</h2>
+
+		<form class="ajax-form space-y-6" action="<?php echo $view->get('action');?>" method="post" id="form">
+			<input type="hidden" name="_csrf_token" id="csrf_token" value="<?php echo $view->e('csrf_token');?>">
+			<!--{hook admin_setting_base_form_start.htm}-->
+			<!-- Website Name -->
+			<?php if ($view->get('site')) { ?>
+			<div class="space-y-2">
+				<label
+					class="block text-sm font-bold text-gray-700 dark:text-gray-300 uppercase tracking-widest text-[10px]">
+					<?php echo $view->get('language.website_name');?>
+				</label>
+				<input type="text" name="<?php echo $view->get('site.sitename.name');?>"
+					id="<?php echo $view->get('site.sitename.name');?>"
+					class="w-full px-4 py-3.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white/50 dark:bg-slate-800/50 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all font-bold text-gray-900 dark:text-white"
+					value="<?php echo $view->e('site.sitename.value');?>"
+					placeholder="<?php echo $view->get('language.website_name');?>">
+			</div>
+			<!--{hook admin_setting_base_form_sitename_after.htm}-->
+			<!-- Site Domain -->
+			<?php if (isset($view->get('site')['domain'])) { ?>
+			<div class="space-y-2">
+				<label
+					class="block text-sm font-bold text-gray-700 dark:text-gray-300 uppercase tracking-widest text-[10px]">
+					<?php echo $view->get('language.domain');?>
+				</label>
+				<input type="text" name="<?php echo $view->get('site.domain.name');?>"
+					id="<?php echo $view->get('site.domain.name');?>"
+					class="w-full px-4 py-3.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white/50 dark:bg-slate-800/50 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all font-mono text-sm text-gray-900 dark:text-white"
+					value="<?php echo $view->e('site.domain.value');?>" placeholder="https://www.example.com">
+			</div>
+			<?php } ?>
+			<?php } ?>
+
+			<!--{hook admin_setting_base_form_domain_after.htm}-->
+
+				<!-- External Link Whitelist -->
+				<div class="space-y-2">
+					<label class="block text-sm font-bold text-gray-700 dark:text-gray-300 uppercase tracking-widest text-[10px]">
+						<?php echo $view->get('language.external_link_whitelist');?>
+					</label>
+					<textarea name="external_link_whitelist" rows="3"
+						class="w-full px-4 py-3.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white/50 dark:bg-slate-800/50 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all font-mono text-sm text-gray-900 dark:text-white resize-none"
+						placeholder="example.com, partner.com, cdn.example.com"><?php echo $view->e('external_link_whitelist');?></textarea>
+					<p class="text-[10px] text-gray-500 font-medium">
+						<?php echo $view->get('language.external_link_whitelist_tip');?>
+					</p>
+				</div>
+				<!--{hook admin_setting_base_form_whitelist_after.htm}-->
+
+				<!-- External Link Redirect Settings -->
+				<div class="space-y-4 border-t border-gray-100 dark:border-gray-700 pt-6 mt-6">
+					<label class="block text-sm font-bold text-gray-700 dark:text-gray-300 uppercase tracking-widest text-[10px]">
+						<?php echo $view->get('language.external_link_redirect');?>
+					</label>
+
+					<div class="flex items-center gap-2">
+						<input type="checkbox" name="external_link_redirect_enabled" value="1"
+							id="external_link_redirect_enabled"
+							class="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+							<?php echo $view->get('external_link_redirect_enabled') ? 'checked' : '';?>>
+						<label for="external_link_redirect_enabled" class="text-sm text-gray-700 dark:text-gray-300">
+							<?php echo $view->get('language.external_link_redirect');?>
+						</label>
+					</div>
+
+					<div class="space-y-2">
+						<label class="block text-sm text-gray-700 dark:text-gray-300">
+							<?php echo $view->get('language.external_link_modules');?>
+						</label>
+						<?php $modules = $view->get('external_link_modules', ['forum']);?>
+						<div class="flex flex-wrap gap-4">
+							<label class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+								<input type="checkbox" name="external_link_modules[]" value="forum"
+									class="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+									<?php echo in_array('forum', $modules) ? 'checked' : '';?>>
+								Forum
+							</label>
+							<label class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+								<input type="checkbox" name="external_link_modules[]" value="page"
+									class="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+									<?php echo in_array('page', $modules) ? 'checked' : '';?>>
+								Page
+							</label>
+							<label class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+								<input type="checkbox" name="external_link_modules[]" value="article"
+									class="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+									<?php echo in_array('article', $modules) ? 'checked' : '';?>>
+								Article
+							</label>
+							<label class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+								<input type="checkbox" name="external_link_modules[]" value="store"
+									class="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+									<?php echo in_array('store', $modules) ? 'checked' : '';?>>
+								Store
+							</label>
+						</div>
+					</div>
+				</div>
+
+			<!-- Site Brief -->
+			<?php if ($view->get('site_brief')) { ?>
+			<div class="space-y-2">
+				<label
+					class="block text-sm font-bold text-gray-700 dark:text-gray-300 uppercase tracking-widest text-[10px]">
+					<?php echo $view->get('site_brief.sitebrief.language');?>
+				</label>
+				<textarea name="<?php echo $view->get('site_brief.sitebrief.name');?>"
+					id="<?php echo $view->get('site_brief.sitebrief.name');?>" rows="4"
+					class="w-full px-4 py-3.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white/50 dark:bg-slate-800/50 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-sm text-gray-900 dark:text-white resize-none"
+					placeholder="<?php echo $view->get('language.sitebrief_tip');?>"><?php echo $view->get('site_brief.sitebrief.value');?></textarea>
+			</div>
+			<?php } ?>
+
+			<!--{hook admin_setting_base_form_sitebrief_after.htm}-->
+
+			<!-- Runlevel (Radio) -->
+			<?php if ($runlevel = $view->get('runlevel', [])) { ?>
+			<div class="space-y-3">
+				<label
+					class="block text-sm font-bold text-gray-700 dark:text-gray-300 uppercase tracking-widest text-[10px]">
+					<?php echo $view->get('language.runlevel');?>
+				</label>
+				<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+					<?php foreach($runlevel['data'] as $key => $item) { ?>
+					<label
+						class="flex items-center p-3.5 rounded-xl border border-gray-100 dark:border-gray-800 bg-white/30 dark:bg-white/5 hover:bg-white/50 dark:hover:bg-white/10 transition-all cursor-pointer group">
+						<input type="radio" name="runlevel" value="<?php echo $item['value'];?>"
+							class="w-5 h-5 text-blue-600 border-gray-300 focus:ring-blue-500 dark:bg-slate-800 dark:border-gray-600"
+							<?php if ($item['checked']) {echo 'checked';} ?>>
+						<span
+							class="ml-3 text-sm font-bold text-gray-700 dark:text-gray-300 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+							<?php echo $item['label'];?>
+						</span>
+					</label>
+					<?php } ?>
+				</div>
+			</div>
+			<?php } ?>
+
+			<!--{hook admin_setting_base_form_runlevel_after.htm}-->
+
+			<!-- Switches (Checkboxes) -->
+			<?php if ($base_on = $view->get('base_on', [])) { ?>
+			<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+				<?php foreach($base_on as $key => $item) { ?>
+				<div class="flex items-center justify-between p-4 rounded-xl border border-gray-100 dark:border-gray-800 bg-white/30 dark:bg-white/5 hover:bg-white/50 dark:hover:bg-white/10 transition-all cursor-pointer group"
+					onclick="toggleSwitch('<?php echo $item['name']; ?>')">
+					<span
+						class="text-sm font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider"><?php echo $item['label']; ?></span>
+					<label class="relative inline-flex items-center cursor-pointer" onclick="event.stopPropagation()">
+						<input type="checkbox" id="<?php echo $item['name']; ?>" name="<?php echo $item['name']; ?>"
+							value="<?php echo $item['value']; ?>" class="sr-only peer post-input"
+							<?php if ($item['value']) {echo 'checked';} ?>>
+						<div
+							class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-500">
+						</div>
+					</label>
+				</div>
+				<?php } ?>
+			</div>
+			<?php } ?>
+
+			<!--{hook admin_setting_base_form_base_on_after.htm}-->
+
+			<!-- Selects -->
+			<div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+				<?php if ($timezone = $view->get('timezone', [])) { ?>
+				<div class="space-y-2">
+					<label
+						class="block text-sm font-bold text-gray-700 dark:text-gray-300 uppercase tracking-widest text-[10px]">
+						<?php echo $timezone['label']; ?>
+					</label>
+					<select name="<?php echo $timezone['name']; ?>" id="<?php echo $timezone['name']; ?>"
+						class="w-full px-4 py-3.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white/50 dark:bg-slate-800/50 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-sm font-medium text-gray-900 dark:text-white appearance-none cursor-pointer">
+						<?php foreach($timezone['data'] as $key => $item) { ?>
+						<option value="<?php echo $key; ?>"
+							<?php if ($timezone['selected'] === $key){echo 'selected="selected"';} ?>>
+							<?php echo $item; ?>
+						</option>
+						<?php } ?>
+					</select>
+				</div>
+				<?php } ?>
+				<!--{hook admin_setting_base_form_timezone_after.htm}-->
+				<?php if ($language_select = $view->get('language_select', [])) { ?>
+				<div class="space-y-2">
+					<label
+						class="block text-sm font-bold text-gray-700 dark:text-gray-300 uppercase tracking-widest text-[10px]">
+						<?php echo $language_select['label']; ?>
+					</label>
+					<select name="<?php echo $language_select['name']; ?>" id="<?php echo $language_select['name']; ?>"
+						class="w-full px-4 py-3.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white/50 dark:bg-slate-800/50 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-sm font-medium text-gray-900 dark:text-white appearance-none cursor-pointer">
+						<?php foreach($language_select['data'] as $key => $item) { ?>
+						<option value="<?php echo $item['value']; ?>"
+							<?php if ($item['selected']){echo 'selected="selected"';} ?>>
+							<?php echo $item['label']; ?>
+						</option>
+						<?php } ?>
+					</select>
+				</div>
+				<?php } ?>
+			</div>
+
+			<!--{hook admin_setting_base_form_language_after.htm}-->
+
+			<!-- Submit Button -->
+			<div class="pt-6">
+				<button type="submit"
+					class="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white font-black uppercase tracking-widest text-xs rounded-xl shadow-lg shadow-blue-500/30 transition-all transform active:scale-[0.98] flex items-center justify-center space-x-2">
+					<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+					</svg>
+					<span><?php echo $view->get('language.submit');?></span>
+				</button>
+			</div>
+		</form>
+	</div>
+</div>
+
+<?php include Compile::include(APP_PATH . 'app/views/admin/footer.inc.htm');?>
+<script>
+	new GlobalFormHandler(".ajax-form", {
+		loadingText: "Saving Settings...",
+		modalSize: "md",
+		modalPosition: "center",
+		timeout: 2
+	});
+
+	function toggleSwitch(id) {
+		const el = document.getElementById(id);
+		el.checked = !el.checked;
+		el.dispatchEvent(new Event('change'));
+	}
+
+	document.querySelectorAll('.post-input').forEach(el => {
+		el.addEventListener('change', function () {
+			this.value = this.checked ? '1' : '0';
+		});
+	});
+
+	/*30分钟token失效，刷新页面*/
+	setTimeout(() => {
+		window.location.reload();
+	}, 1800000);
+</script>
+<!--{hook admin_setting_base_end.htm}-->

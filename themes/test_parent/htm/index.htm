@@ -1,0 +1,18 @@
+<?php use App\Core\Compile;?>
+<?php include Compile::include(APP_PATH.'app/views/htm/header.inc.htm');?>
+
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+    <div class="glass-panel rounded-3xl p-8 text-center">
+        <h1
+            class="text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600 mb-4">
+            Test Parent Theme Loaded
+        </h1>
+        <p class="text-gray-600 dark:text-gray-400 max-w-2xl mx-auto mb-8">
+            This is a rendering test for the Parent theme. If you see this, the theme selection and template mapping
+            logic are working correctly.
+        </p>
+        <!--{hook test_parent_index_center.htm}-->
+    </div>
+</div>
+
+<?php include Compile::include(APP_PATH.'app/views/htm/footer.inc.htm');?>

@@ -1,0 +1,251 @@
+<?php use App\Core\Compile;?>
+<?php include Compile::include(APP_PATH.'app/views/admin/header.inc.htm');?>
+<?php $stats = $view->get('stats'); ?>
+<?php $systemHealth = $view->get('system_health'); ?>
+<?php $recentTasks = $view->get('recent_tasks'); ?>
+
+<!-- Header & Env Notice -->
+<div class="mb-8 w-full max-w-7xl mx-auto">
+	<h1 class="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+		<?php echo $view->get('language.dashboard_title'); ?></h1>
+	<p class="text-gray-500 dark:text-gray-400 text-sm"><?php echo $view->get('language.task_manage_dashboard'); ?></p>
+</div>
+
+<?php if (!$stats || !$systemHealth) { ?>
+<!-- Env Setup Reminder -->
+<div class="glass-panel rounded-2xl overflow-hidden mb-8 border-l-4 border-blue-600 w-full max-w-7xl mx-auto">
+	<div class="p-6 flex items-start gap-6">
+		<div class="p-4 bg-blue-100 dark:bg-blue-900/30 rounded-2xl">
+			<svg class="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+					d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+			</svg>
+		</div>
+		<div>
+			<h3 class="text-xl font-bold text-gray-900 dark:text-white">
+				<?php echo $view->get('language.env_setup_title'); ?></h3>
+			<p class="text-gray-600 dark:text-gray-400 mt-1 mb-4">
+				<?php echo $view->get('language.env_setup_subtitle'); ?></p>
+			<a href="<?php echo $view->get('operation_links.list.url');?>"
+				class="inline-flex items-center text-sm font-bold text-blue-600 hover:text-blue-700">
+				<?php echo $view->get('operation_links.list.label'); ?>
+				<svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+				</svg>
+			</a>
+		</div>
+	</div>
+</div>
+<?php } ?>
+
+<?php if ($stats) { ?>
+<!-- Stats Grid -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8 w-full max-w-7xl mx-auto">
+	<!-- Pending -->
+	<div
+		class="glass-panel rounded-2xl p-6 bg-gradient-to-br from-white to-amber-50/30 dark:from-slate-800 dark:to-amber-900/10 transition-all hover:shadow-2xl hover:shadow-amber-500/10">
+		<div class="flex items-center justify-between mb-4">
+			<div class="p-3 bg-amber-100 dark:bg-amber-900/40 rounded-xl">
+				<svg class="w-6 h-6 text-amber-600 dark:text-amber-400" fill="none" stroke="currentColor"
+					viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+						d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+				</svg>
+			</div>
+			<span
+				class="text-xs font-bold text-amber-500 bg-amber-50 dark:bg-amber-900/20 px-2 py-1 rounded-lg"><?php echo $view->get('language.badge_waitlist'); ?></span>
+		</div>
+		<h4 class="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-1">
+			<?php echo $view->get('language.pending'); ?></h4>
+		<p class="text-3xl font-extrabold text-gray-900 dark:text-white"><?php echo $stats['pending'] ?? 0; ?></p>
+	</div>
+
+	<!-- Running -->
+	<div
+		class="glass-panel rounded-2xl p-6 bg-gradient-to-br from-white to-blue-50/30 dark:from-slate-800 dark:to-blue-900/10 transition-all hover:shadow-2xl hover:shadow-blue-500/10">
+		<div class="flex items-center justify-between mb-4">
+			<div class="p-3 bg-blue-100 dark:bg-blue-900/40 rounded-xl">
+				<svg class="w-6 h-6 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor"
+					viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+						d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+				</svg>
+			</div>
+			<span
+				class="text-xs font-bold text-blue-500 bg-blue-50 dark:bg-blue-900/20 px-2 py-1 rounded-lg animate-pulse"><?php echo $view->get('language.badge_running'); ?></span>
+		</div>
+		<h4 class="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-1">
+			<?php echo $view->get('language.running'); ?></h4>
+		<p class="text-3xl font-extrabold text-gray-900 dark:text-white"><?php echo $stats['running'] ?? 0; ?></p>
+	</div>
+
+	<!-- Success -->
+	<div
+		class="glass-panel rounded-2xl p-6 bg-gradient-to-br from-white to-green-50/30 dark:from-slate-800 dark:to-green-900/10 transition-all hover:shadow-2xl hover:shadow-green-500/10">
+		<div class="flex items-center justify-between mb-4">
+			<div class="p-3 bg-green-100 dark:bg-green-900/40 rounded-xl">
+				<svg class="w-6 h-6 text-green-600 dark:text-green-400" fill="none" stroke="currentColor"
+					viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+						d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+				</svg>
+			</div>
+			<span
+				class="text-xs font-bold text-green-500 bg-green-50 dark:bg-green-900/20 px-2 py-1 rounded-lg"><?php echo $view->get('language.badge_healthy'); ?></span>
+		</div>
+		<h4 class="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-1">
+			<?php echo $view->get('language.success'); ?></h4>
+		<p class="text-3xl font-extrabold text-gray-900 dark:text-white"><?php echo $stats['success'] ?? 0; ?></p>
+	</div>
+
+	<!-- Failed -->
+	<div
+		class="glass-panel rounded-2xl p-6 bg-gradient-to-br from-white to-red-50/30 dark:from-slate-800 dark:to-red-900/10 transition-all hover:shadow-2xl hover:shadow-red-500/10 group">
+		<div class="flex items-center justify-between mb-4">
+			<div class="p-3 bg-red-100 dark:bg-red-900/40 rounded-xl">
+				<svg class="w-6 h-6 text-red-600 dark:text-red-400" fill="none" stroke="currentColor"
+					viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+						d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+				</svg>
+			</div>
+			<a href="<?php echo $view->get('operation_links.failed.url'); ?>"
+				class="text-xs font-bold text-red-500 bg-red-50 dark:bg-red-900/20 px-2 py-1 rounded-lg hover:bg-red-500 hover:text-white transition-all underline decoration-1 underline-offset-2"><?php echo $view->get('operation_links.failed.label'); ?></a>
+		</div>
+		<h4 class="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-1">
+			<?php echo $view->get('language.failed'); ?></h4>
+		<p class="text-3xl font-extrabold text-gray-900 dark:text-white"><?php echo $stats['failed'] ?? 0; ?></p>
+	</div>
+</div>
+<?php } ?>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8 w-full max-w-7xl mx-auto">
+	<!-- Active Tasks Table -->
+	<div class="lg:col-span-2 space-y-6">
+		<div class="glass-panel rounded-2xl overflow-hidden">
+			<div class="px-6 py-5 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center">
+				<h3 class="text-lg font-bold text-gray-900 dark:text-white">
+					<?php echo $view->get('language.recent_tasks'); ?>
+				</h3>
+				<a href="<?php echo $view->get('operation_links.list.url');?>"
+					class="text-sm font-bold text-blue-600 hover:text-blue-700 transition-colors">
+					<?php echo $view->get('operation_links.list.label'); ?> →
+				</a>
+			</div>
+			<div class="overflow-x-auto">
+				<table class="min-w-full text-left text-sm">
+					<thead class="bg-gray-50/50 dark:bg-slate-800/50">
+						<tr>
+							<th class="px-6 py-4 font-semibold text-gray-600 dark:text-gray-300">
+								<?php echo $view->get('language.task_id'); ?></th>
+							<th class="px-6 py-4 font-semibold text-gray-600 dark:text-gray-300">
+								<?php echo $view->get('language.class_name'); ?></th>
+							<th class="px-6 py-4 font-semibold text-gray-600 dark:text-gray-300">
+								<?php echo $view->get('language.status'); ?></th>
+						</tr>
+					</thead>
+					<tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+						<?php if ($recentTasks) { foreach($recentTasks as $task) { ?>
+						<tr class="hover:bg-gray-50/50 dark:hover:bg-white/5 transition-colors group">
+							<td class="px-6 py-4 font-mono font-medium text-gray-900 dark:text-white">
+								<?php echo $task['id']; ?></td>
+							<td class="px-6 py-4">
+								<div class="font-bold text-gray-900 dark:text-white truncate max-w-[180px]">
+									<?php echo $task['class_name']; ?></div>
+								<div class="text-[10px] text-gray-400">
+									<?php echo $task['method_display']; ?></div>
+							</td>
+							<td class="px-6 py-4">
+								<span
+									class="px-2 py-0.5 text-[9px] uppercase font-bold rounded-lg <?php echo $task['status_class']; ?>">
+									<?php echo $task['status_label']; ?>
+								</span>
+							</td>
+						</tr>
+						<?php }} else { ?>
+						<tr>
+							<td colspan="3" class="px-6 py-10 text-center text-gray-500 italic">No tasks recorded</td>
+						</tr>
+						<?php } ?>
+					</tbody>
+				</table>
+			</div>
+		</div>
+	</div>
+
+	<!-- System Health Sidebar -->
+	<div class="space-y-6">
+		<div class="glass-panel rounded-2xl p-6 border border-blue-100 dark:border-blue-900/20">
+			<h3
+				class="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-widest mb-6 flex items-center">
+				<svg class="w-4 h-4 mr-2 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+						d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 21a11.955 11.955 0 01-9.618-7.016m19.236 0h-19.236">
+					</path>
+				</svg>
+				<?php echo $view->get('language.system_status'); ?>
+			</h3>
+
+			<div class="space-y-5">
+				<div class="flex items-center justify-between">
+					<span
+						class="text-xs font-bold text-gray-500 uppercase tracking-widest"><?php echo $view->get('language.redis_connected'); ?></span>
+					<?php if ($systemHealth['redis_connected'] ?? false) { ?>
+					<span class="flex items-center text-green-500 font-bold text-xs uppercase"><span
+							class="w-2 h-2 rounded-full bg-green-500 mr-2 shadow-[0_0_8px_rgba(34,197,94,0.6)]"></span>Online</span>
+					<?php } else { ?>
+					<span class="flex items-center text-red-500 font-bold text-xs uppercase"><span
+							class="w-2 h-2 rounded-full bg-red-500 mr-2 shadow-[0_0_8px_rgba(239,68,68,0.6)]"></span>Offline</span>
+					<?php } ?>
+				</div>
+
+				<div class="h-px bg-gray-100 dark:bg-gray-700"></div>
+
+				<div class="flex flex-col">
+					<div class="flex items-center justify-between mb-2">
+						<span
+							class="text-xs font-bold text-gray-500 uppercase tracking-widest"><?php echo $view->get('language.queue_size'); ?></span>
+						<span
+							class="text-sm font-extrabold text-blue-600 dark:text-blue-400"><?php echo $systemHealth['queue_size'] ?? 0; ?></span>
+					</div>
+					<div class="w-full bg-gray-100 dark:bg-gray-800 rounded-full h-1.5">
+						<div class="bg-blue-600 h-1.5 rounded-full transition-all duration-1000"
+							style="width: <?php echo $systemHealth['queue_percent'] ?? 0; ?>%"></div>
+					</div>
+				</div>
+
+				<div class="flex flex-col">
+					<div class="flex items-center justify-between mb-2">
+						<span
+							class="text-xs font-bold text-gray-500 uppercase tracking-widest"><?php echo $view->get('language.memory_usage'); ?></span>
+						<span
+							class="text-sm font-extrabold text-indigo-600 dark:text-indigo-400"><?php echo $systemHealth['memory_usage'] ?? '0%'; ?></span>
+					</div>
+					<div class="w-full bg-gray-100 dark:bg-gray-800 rounded-full h-1.5">
+						<div class="bg-indigo-600 h-1.5 rounded-full transition-all duration-1000 shadow-[0_0_10px_rgba(79,70,229,0.3)]"
+							style="width: <?php echo $systemHealth['memory_percent'] ?? 0; ?>%"></div>
+					</div>
+				</div>
+
+				<div class="h-px bg-gray-100 dark:bg-gray-700"></div>
+
+				<div class="flex flex-col">
+					<span
+						class="text-xs font-bold text-gray-500 uppercase tracking-widest mb-1"><?php echo $view->get('language.last_execution'); ?></span>
+					<span class="text-sm font-medium text-gray-900 dark:text-white italic">
+						<?php echo !empty($systemHealth['last_execution']) && is_numeric($systemHealth['last_execution']) ? date('M j, Y H:i:s', (int)$systemHealth['last_execution']) : 'Never'; ?>
+					</span>
+				</div>
+			</div>
+		</div>
+
+		<div class="flex justify-center">
+			<a href="<?php echo $view->get('operation_links.dashboard.url');?>"
+				class="w-full py-4 text-sm font-bold text-center text-white bg-blue-600 hover:bg-blue-700 rounded-2xl shadow-xl shadow-blue-500/20 transition-all transform hover:-translate-y-1">
+				<?php echo $view->get('operation_links.dashboard.label'); ?>
+			</a>
+		</div>
+	</div>
+</div>
+
+<?php include Compile::include(APP_PATH . 'app/views/admin/footer.inc.htm');?>

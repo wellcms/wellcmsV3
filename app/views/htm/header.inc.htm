@@ -1,0 +1,61 @@
+<?php use App\Core\Compile;?>
+<!--{hook header_start.htm}-->
+<!DOCTYPE html>
+<html class="h-full" lang="<?php echo $view->e('website.locale.default');?>">
+
+	<head>
+		<?php echo defined('BASE_HREF') ? '<base href="'.BASE_HREF.'" />' : '' ;?>
+		<!--{hook header_meta_before.htm}-->
+		<meta charset="UTF-8">
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+		<meta http-equiv="X-UA-Compatible" content="IE=Edge,chrome=1" />
+		<meta http-equiv="Cache-Control" content="no-transform" />
+		<meta http-equiv="Cache-Control" content="no-siteapp" />
+		<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no" />
+		<meta name="referrer" content="origin-when-cross-origin">
+		<meta name="applicable-device" content="pc,mobile" />
+		<meta name="MobileOptimized" content="width" />
+		<meta name="HandheldFriendly" content="true" />
+		<meta name="renderer" content="webkit" />
+		<?php $header = $view->website->header;?>
+		<?php if($keywords = $header->e('keywords')) { ?>
+		<meta name="keywords" content="<?php echo $keywords;?>" />
+		<?php } ?>
+
+		<meta name="description" content="<?php echo $header->e('description');?>" />
+
+		<title>
+			<?php echo $header->e('title');?>
+		</title>
+
+		<!--{hook header_link_before.htm}-->
+
+		<?php $staticVersion = $view->get('website.static_version'); ?>
+		<?php $viewPath = $view->get('website.current.view'); ?>
+		<link rel="shortcut icon" href="<?php echo $viewPath;?>image/favicon.ico">
+		<link rel="icon" sizes="32x32" href="<?php echo $viewPath;?>image/favicon.ico" type="image/x-icon">
+		<link rel="Bookmark" href="<?php echo $viewPath;?>image/favicon.ico">
+
+		<link rel="stylesheet" href="<?php echo $viewPath;?>css/tailwind.min.css<?php echo $staticVersion; ?>">
+		<asset-css group="global" />
+		<asset-js group="global" />
+
+		<!--{hook header_link_after.htm}-->
+
+	</head>
+
+	<body
+		class="flex flex-col min-h-screen bg-gray-50 dark:bg-slate-900 text-gray-800 dark:text-gray-200 font-sans selection:bg-blue-500 selection:text-white">
+
+		<!-- Background Blobs -->
+		<div class="fixed inset-0 z-0 overflow-hidden pointer-events-none">
+			<div class="absolute -top-[10%] -right-[5%] w-[40%] h-[40%] rounded-full bg-blue-500/10 blur-3xl animate-blob"></div>
+			<div class="absolute top-[20%] -left-[10%] w-[30%] h-[30%] rounded-full bg-purple-500/10 blur-3xl animate-blob animation-delay-2000"></div>
+			<div class="absolute bottom-[10%] right-[10%] w-[30%] h-[30%] rounded-full bg-indigo-500/10 blur-3xl animate-blob animation-delay-4000 hidden md:block"></div>
+			<div class="absolute -bottom-10 left-20 w-72 h-72 bg-purple-500/10 rounded-full mix-blend-multiply filter blur-3xl opacity-10 animate-pulse-slow"></div>
+            <div class="absolute top-20 -right-4 w-72 h-72 bg-blue-500/50 rounded-full mix-blend-multiply filter blur-3xl opacity-10 animate-pulse-slow animation-delay-2000"></div>
+		</div>
+
+		<!--{hook header_body_start.htm}-->
+		<!-- 此处加载导航栏 请先创建导航 -->
+		<?php include Compile::include(APP_PATH.'app/views/htm/header_nav.inc.htm');?>

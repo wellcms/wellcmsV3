@@ -1,0 +1,276 @@
+<?php use App\Core\Compile;?>
+<?php include Compile::include(APP_PATH.'app/views/admin/header.inc.htm');?>
+<?php $itemList = $view->get('item_list'); ?>
+
+<!-- Actions Bar -->
+<div class="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4 w-full max-w-7xl mx-auto">
+	<div class="flex flex-nowrap items-center space-x-2 w-full sm:w-auto">
+		<select name="searchType" id="searchType" value="<?php echo $view->e('search.searchType'); ?>"
+			class="w-1/4 sm:w-40 border border-gray-200 dark:border-gray-700 rounded-xl bg-white/50 dark:bg-slate-800/50 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 py-2 px-3 outline-none whitespace-nowrap">
+			<?php foreach ($view->get('search.types', []) as $k => $v) { ?>
+			<option value="<?php echo $k; ?>" <?php echo $k === $view->get('search.searchType') ? 'selected' : ''; ?>>
+				<?php echo $v; ?></option>
+			<?php } ?>
+		</select>
+
+		<div class="relative flex-1 sm:w-64">
+			<input type="text" name="search" id="searchInput"
+				placeholder="<?php echo $view->get('language.please_enter_keywords'); ?>"
+				value="<?php echo $view->e('search.keywords'); ?>"
+				class="w-full pl-10 pr-4 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white/50 dark:bg-slate-800/50 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
+			<svg class="w-5 h-5 text-gray-400 absolute left-3 top-2.5" fill="none" stroke="currentColor"
+				viewBox="0 0 24 24">
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+					d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+			</svg>
+		</div>
+
+		<button
+			onclick="performSearch('<?php echo $view->get('config.rewrite'); ?>', '<?php echo $view->get('config.path'); ?>')"
+			class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-lg shadow-blue-500/30 transition-all transform hover:-translate-y-0.5 text-sm font-medium">
+			<?php echo $view->get('language.search'); ?>
+		</button>
+	</div>
+
+	<?php if ($createBtn = $view->get('actions.create')) { ?>
+	<div class="flex items-center space-x-3 w-full sm:w-auto">
+		<a href="<?php echo $createBtn['url'];?>"
+			class="flex-1 sm:flex-none px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-lg shadow-blue-500/30 transition-all transform hover:-translate-y-0.5 text-sm font-medium text-center">
+			+ <?php echo $createBtn['label']; ?>
+		</a>
+	</div>
+	<?php } ?>
+</div>
+
+<!-- Users Table -->
+<div class="glass-panel rounded-2xl overflow-hidden mb-6 w-full max-w-7xl mx-auto" id="user-list">
+	<div class="overflow-x-auto">
+		<table class="min-w-full text-left text-sm">
+			<thead class="bg-gray-50/50 dark:bg-slate-800/50 border-b border-gray-200 dark:border-gray-700">
+				<tr>
+					<th class="px-6 py-4 font-semibold text-gray-600 dark:text-gray-300">
+						<input type="checkbox" id="selectAll"
+							class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+					</th>
+					<th class="px-6 py-4 font-semibold text-gray-600 dark:text-gray-300">
+						<?php echo $view->get('language.user_id'); ?></th>
+					<th class="px-6 py-4 font-semibold text-gray-600 dark:text-gray-300">
+						<?php echo $view->get('language.user'); ?></th>
+					<th class="px-6 py-4 font-semibold text-gray-600 dark:text-gray-300">
+						<?php echo $view->get('language.user_group'); ?></th>
+					<th class="px-6 py-4 font-semibold text-gray-600 dark:text-gray-300">
+						<?php echo $view->get('language.created_at'); ?></th>
+					<th class="px-6 py-4 font-semibold text-gray-600 dark:text-gray-300">
+						<?php echo $view->get('language.create_ip'); ?></th>
+					<th class="px-6 py-4 font-semibold text-gray-600 dark:text-gray-300 text-right">
+						<?php echo $view->get('language.operation'); ?></th>
+				</tr>
+			</thead>
+			<tbody class="divide-y divide-gray-200 dark:divide-gray-700 user-list">
+				<?php if ($itemList) { foreach($itemList as $key => $item) { ?>
+				<tr id="<?php echo $item['id'];?>" class="hover:bg-gray-50/50 dark:hover:bg-white/5 transition-colors">
+					<td class="px-6 py-4">
+						<?php if (isset($item['ops']['delete'])) { ?>
+						<input type="checkbox" class="rounded border-gray-300 text-blue-600 item" name="moduid"
+							value="<?php echo $item['id']; ?>" />
+						<?php } ?>
+					</td>
+					<td class="px-6 py-4 font-medium text-gray-900 dark:text-white"><?php echo $item['id'];?></td>
+					<td class="px-6 py-4">
+						<div class="flex items-center">
+							<div class="relative">
+								<img class="h-10 w-10 rounded-full border-2 border-white dark:border-slate-700 shadow-sm"
+									src="<?php echo $item['avatar_url'];?>" alt="">
+							</div>
+							<div class="ml-3">
+								<div class="font-bold text-gray-900 dark:text-white"><?php echo $item['username'];?>
+								</div>
+								<div class="text-gray-500 dark:text-gray-400 text-xs"><?php echo $item['email'];?></div>
+							</div>
+						</div>
+					</td>
+					<td class="px-6 py-4">
+						<span
+							class="px-2 py-1 text-[10px] uppercase font-bold rounded-lg bg-blue-100/50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400">
+							<?php echo $item['groupname'];?>
+						</span>
+					</td>
+					<td class="px-6 py-4 text-gray-500 dark:text-gray-400 text-xs"><?php echo $item['created_at_fmt'];?>
+					</td>
+					<td class="px-6 py-4 text-gray-500 dark:text-gray-400 text-xs"><?php echo $item['create_ip'];?>
+					</td>
+					<td class="px-6 py-4 text-right space-x-2">
+						<?php foreach ($item['ops'] as $op) { ?>
+						<a href="<?php echo $op['url'];?>" class="<?php echo $op['class'];?> transition-colors">
+							<?php echo $op['label']; ?>
+						</a>
+						<?php } ?>
+					</td>
+				</tr>
+				<?php }} ?>
+			</tbody>
+		</table>
+	</div>
+
+	<!-- Bulk Actions & Pagination -->
+	<div
+		class="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row justify-between items-center gap-4">
+		<div class="flex items-center space-x-3">
+			<?php if ($bulkDelete = $view->get('actions.bulk_delete')) { ?>
+			<button type="button"
+				class="bulk-delete px-4 py-2 text-sm font-bold text-white rounded-xl bg-red-500 hover:bg-red-600 shadow-lg shadow-red-500/20 transition-all transform hover:-translate-y-0.5"
+				data-url="<?php echo $bulkDelete['url']; ?>" data-csrftoken="<?php echo $view->e('csrf_token'); ?>"
+				data-confirm="<?php echo $bulkDelete['confirm']; ?>" processing="false">
+				<?php echo $bulkDelete['label']; ?>
+			</button>
+			<?php } ?>
+			<span class="text-xs text-gray-500 dark:text-gray-400">UserID: <?php echo count($itemList ?? []); ?>
+				<?php echo $view->get('language.users_on_page'); ?></span>
+		</div>
+
+		<?php if ($view->get('pagination.previous') || $view->get('pagination.next')) { ?>
+		<nav class="flex items-center space-x-2">
+			<?php if ($prev = $view->get('pagination.previous')) { ?>
+			<a href="<?php echo $prev['url']; ?>"
+				class="px-4 py-2 text-xs font-bold rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-slate-800 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5 transition-all">
+				<?php echo $prev['label']; ?>
+			</a>
+			<?php } ?>
+
+			<?php if ($next = $view->get('pagination.next')) { ?>
+			<a href="<?php echo $next['url']; ?>"
+				class="px-4 py-2 text-xs font-bold rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-slate-800 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5 transition-all">
+				<?php echo $next['label']; ?>
+			</a>
+			<?php } ?>
+		</nav>
+		<?php } ?>
+	</div>
+</div>
+
+<?php include Compile::include(APP_PATH . 'app/views/admin/footer.inc.htm');?>
+<script>
+	function performSearch(rewrite, path) {
+		const searchType = document.getElementById("searchType").value;
+		const keywords = document.getElementById("searchInput").value.trim();
+
+		if (!keywords) {
+			wellcms.alert("<?php echo $view->get('language.please_enter_keywords'); ?>");
+			return;
+		}
+
+		window.location = wellcms.url('admin/user/list', {
+			searchType: searchType,
+			keywords: urlEncode(keywords)
+		}, {
+			url_rewrite_on: rewrite,
+			path: path
+		});
+	}
+
+	document.addEventListener("DOMContentLoaded", function () {
+		function setupCheckboxes(allId, itemClass) {
+			const master = document.getElementById(allId);
+			if (!master) return;
+			const container = document.getElementById('user-list');
+			const getItems = () => Array.from(container.querySelectorAll(`input.${itemClass}`));
+
+			master.onchange = () => {
+				getItems().forEach(item => item.checked = master.checked);
+			};
+
+			container.addEventListener("change", (e) => {
+				if (e.target.classList.contains(itemClass)) {
+					const items = getItems();
+					const checkedCount = items.filter(i => i.checked).length;
+					master.checked = checkedCount === items.length;
+					master.indeterminate = checkedCount > 0 && checkedCount < items.length;
+				}
+			});
+		}
+
+		function getSelectedUserids() {
+			return Array.from(document.querySelectorAll('#user-list input.item:checked'))
+				.map(cb => cb.value)
+				.filter(v => v && v !== 'on');
+		}
+
+		setupCheckboxes("selectAll", "item");
+
+		const searchTypeEl = document.getElementById('searchType');
+		if (searchTypeEl) {
+			searchTypeEl.value = searchTypeEl.getAttribute("value") || 'user_id';
+		}
+
+		const bulkBtn = document.querySelector(".bulk-delete");
+		if (bulkBtn) {
+			bulkBtn.addEventListener("click", async function () {
+				if (this.getAttribute("processing") === "true") return;
+
+				const userids = getSelectedUserids();
+				if (wellcms.isEmpty(userids)) {
+					wellcms.toast("<?php echo $view->get('language.please_select_items'); ?>", "warning");
+					return;
+				}
+
+				wellcms.confirm(this.dataset.confirm, async () => {
+					try {
+						this.setAttribute("processing", "true");
+						const originalLabel = this.innerHTML;
+						this.innerHTML = "<?php echo $view->get('language.deleting'); ?>";
+
+						const res = await wellcms.post(this.dataset.url, {
+							user_id: userids,
+							_csrf_token: this.dataset.csrftoken
+						});
+
+						if (res.code === 0) {
+							wellcms.toast(res.message, "success");
+							setTimeout(() => window.location.reload(), 1000);
+						} else {
+							wellcms.error(res.message);
+							this.setAttribute("processing", "false");
+							this.innerHTML = originalLabel;
+						}
+					} catch (error) {
+						wellcms.error("<?php echo $view->get('language.network_error'); ?>: " + error.message);
+						this.setAttribute("processing", "false");
+						this.innerHTML = originalLabel;
+					}
+				});
+			});
+		}
+
+		document.addEventListener('click', async (e) => {
+			const btn = e.target.closest('.ajax-delete');
+			if (!btn) return;
+			e.preventDefault();
+
+			const url = btn.getAttribute('href');
+			const row = btn.closest('tr');
+			const userid = row ? row.id : null;
+			const confirmMsg = "<?php echo $view->get('language.confirm_delete'); ?>";
+
+			wellcms.confirm(confirmMsg, async () => {
+				try {
+					const res = await wellcms.post(url, {
+						user_id: userid,
+						_csrf_token: "<?php echo $view->e('csrf_token'); ?>"
+					});
+
+					if (res.code === 0) {
+						wellcms.toast(res.message, "success");
+						if (row) {
+							row.classList.add('opacity-0', 'transition-opacity', 'duration-500');
+							setTimeout(() => row.remove(), 500);
+						}
+					} else {
+						wellcms.error(res.message);
+					}
+				} catch (err) {
+					wellcms.error("<?php echo $view->get('language.network_error'); ?>: " + err.message);
+				}
+			});
+		});
+	});
+</script>

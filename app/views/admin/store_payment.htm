@@ -1,0 +1,173 @@
+<?php use App\Core\Compile;?>
+<?php include Compile::include(APP_PATH.'app/views/admin/header.inc.htm');?>
+
+<div class="flex items-center justify-center min-h-[60vh] px-4 py-12">
+	<div class="glass-panel w-full max-w-lg rounded-3xl p-8 sm:p-10 shadow-2xl relative overflow-hidden">
+		<!-- Decoration -->
+		<div class="absolute -top-10 -right-10 w-40 h-40 bg-blue-500/10 rounded-full blur-3xl"></div>
+		<div class="absolute -bottom-10 -left-10 w-40 h-40 bg-indigo-500/10 rounded-full blur-3xl"></div>
+
+		<div class="relative z-10 space-y-8">
+			<!-- Header -->
+			<div class="text-center space-y-2">
+				<div class="inline-flex p-4 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 rounded-2xl mb-2">
+					<svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+							d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+					</svg>
+				</div>
+				<h2 class="text-2xl font-black text-gray-900 dark:text-white uppercase tracking-tight">
+					<?php echo $view->get('payment_tip');?>
+				</h2>
+				<p class="text-xs font-bold text-gray-400 uppercase tracking-widest">
+					<?php echo $view->get('language.secure_payment_auth');?>
+				</p>
+			</div>
+
+			<div class="ajax-body modal-body" payapi="<?php echo $view->get('return.pay_api');?>"
+				rewrite="<?php echo $view->get('config.rewrite'); ?>" path="<?php echo $view->get('config.path'); ?>"
+				qrcodeurl="<?php echo $view->get('return.url'); ?>">
+
+				<?php if ($view->get('qrcode')) { ?>
+				<!-- QR Code View -->
+				<div id="qrcode-container" class="flex flex-col items-center justify-center space-y-6 py-6">
+					<div id="qrcode"
+						class="p-4 bg-white rounded-3xl shadow-inner border border-gray-100 flex items-center justify-center min-h-[200px] min-w-[200px]">
+						<!-- QR Code will be injected here -->
+					</div>
+					<div class="text-center space-y-1">
+						<p class="text-sm font-bold text-gray-900 dark:text-white">
+							<?php echo $view->get('language.scan_to_pay');?></p>
+						<p class="text-[10px] font-black text-gray-400 uppercase tracking-widest">
+							<?php echo $view->get('language.waiting_transaction');?></p>
+					</div>
+				</div>
+				<?php } else { ?>
+				<!-- Password Form -->
+				<form class="ajax-form space-y-6" action="<?php echo $view->get('action');?>" method="post" id="form">
+					<input type="hidden" name="_csrf_token" id="csrf_token"
+						value="<?php echo $view->get('csrf_token');?>">
+					<input type="hidden" name="dir" value="<?php echo $view->get('dir');?>">
+					<input type="hidden" name="pay_token" value="<?php echo $view->get('pay_token');?>">
+
+					<!-- Price & Balance -->
+					<div class="text-center space-y-3 mb-6">
+						<div class="text-3xl font-black text-gray-900 dark:text-white">¥<?php echo $view->get('price');?></div>
+						<?php if ((float)$view->get('balance') < (float)$view->get('price')) { ?>
+						<div class="text-sm text-red-500 font-bold">
+							<?php echo $view->get('admin.insufficient_balance_short'); ?>（¥<?php echo $view->get('balance');?> / ¥<?php echo $view->get('price');?>）
+						</div>
+						<div>
+							<a href="<?php echo rtrim($view->get('official_url'), '/') . '/my/recharge.html';?>" target="_blank" class="text-blue-500 underline text-sm"><?php echo $view->get('admin.go_recharge'); ?></a>
+						</div>
+						<?php } else { ?>
+						<div class="text-sm text-gray-500 dark:text-gray-400"><?php echo $view->get('admin.balance_label'); ?>：¥<?php echo $view->get('balance');?></div>
+						<?php } ?>
+					</div>
+
+					<div class="space-y-4">
+						<div class="relative group">
+							<input type="password" name="password" id="password" required
+								class="w-full px-6 py-4 rounded-2xl bg-gray-50 dark:bg-white/5 border border-transparent focus:border-blue-500 focus:bg-white dark:focus:bg-white/10 outline-none text-sm font-bold transition-all duration-300"
+								placeholder="<?php echo $view->get('language.password');?>" />
+						</div>
+						<p
+							class="text-[10px] font-black text-gray-400 uppercase tracking-widest leading-relaxed text-center px-4">
+							<?php echo $view->get('language.payment_password_tip');?>
+						</p>
+					</div>
+
+					<?php $canAfford = (float)$view->get('balance') >= (float)$view->get('price'); ?>
+					<button type="submit"
+						class="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-black uppercase tracking-widest text-xs shadow-xl shadow-blue-600/20 transition-all active:scale-[0.98] <?php echo !$canAfford ? 'opacity-50 cursor-not-allowed' : ''; ?>"
+						<?php echo !$canAfford ? 'disabled' : ''; ?>>
+						<?php echo $canAfford ? $view->get('language.submit') : $view->get('language.insufficient_balance_short'); ?>
+					</button>
+				</form>
+				<?php } ?>
+			</div>
+		</div>
+	</div>
+</div>
+
+<?php include Compile::include(APP_PATH . 'app/views/admin/footer.inc.htm');?>
+<script src="<?php echo $view_path;?>js/qrcode.min.js"></script>
+<script ajax-eval="true">
+	const ajaxBody = document.querySelector('.ajax-body');
+	const payapi = parseInt(ajaxBody.getAttribute('payapi'));
+	const rewrite = parseInt(ajaxBody.getAttribute('rewrite')) || 0;
+	const path = ajaxBody.getAttribute('path');
+	const qrcodeurl = ajaxBody.getAttribute('qrcodeurl');
+	const dir = "<?php echo $view->get('dir');?>";
+
+	if (1 === payapi) {
+		const qrcodeDiv = document.getElementById('qrcode');
+		const iframe = document.createElement('iframe');
+		Object.assign(iframe, {
+			width: '200px',
+			height: '210px',
+			frameborder: 'no',
+			scrolling: 'no',
+			style: 'margin: 0 auto; border: none; border-radius: 1rem;',
+			src: qrcodeurl
+		});
+		qrcodeDiv.innerHTML = '';
+		qrcodeDiv.appendChild(iframe);
+	} else if (2 === payapi) {
+		if (typeof kjua === 'function') {
+			let qrcode = kjua({
+				text: qrcodeurl,
+				size: 200,
+				fill: '#000',
+				back: '#fff',
+				rounded: 10
+			});
+			const qrcodeDiv = document.getElementById('qrcode');
+			qrcodeDiv.innerHTML = '';
+			qrcodeDiv.appendChild(qrcode);
+		}
+	} else {
+		new GlobalFormHandler(".ajax-form", {
+			loadingText: "<?php echo $view->get('language.processing');?>",
+			timeout: 2
+		});
+		const form = document.getElementById('form');
+		if (form) {
+			form.addEventListener('wellcms:form-success', function (e) {
+				// GlobalFormHandler 已处理 redirect，此处仅做无 redirect 时的兜底
+				if (!e.detail.data?.redirect?.url) {
+					showAlert({
+						title: "<?php echo $view->get('language.success');?>",
+						body: "<?php echo $view->get('language.payment_verified');?>"
+					});
+					setTimeout(function () {
+						window.location.reload();
+					}, 2000);
+				}
+			});
+		}
+	}
+
+	if (1 === payapi || 2 === payapi) {
+		let times = 0;
+		const t = setInterval(function () {
+			if (++times > 100) {
+				clearInterval(t);
+				showAlert({ title: "Timeout", body: "Payment verification timed out, please refresh the page and try again." });
+				return;
+			}
+
+			wellcms.post(wellcms.url('admin/store/bought', {}, { path: path, url_rewrite_on: rewrite }), { dir: dir })
+				.then(function (response) {
+					if (0 === response.code) {
+						clearInterval(t);
+						showAlert({ title: "<?php echo $view->get('language.success');?>", body: "<?php echo $view->get('language.payment_verified');?>" });
+						setTimeout(function () {
+							window.location = wellcms.url('admin/store/detail', { dir: dir }, { path: path, url_rewrite_on: rewrite });
+						}, 1500);
+					}
+				})
+				.catch(function () {});
+		}, 5000);
+	}
+</script>

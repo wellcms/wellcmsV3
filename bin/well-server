@@ -1,0 +1,159 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+/**
+ * WellCMS 3.0 Standard Industrial Entry (Swoole Mode)
+ * Ultra-Geek Version: Optimized for reliability and DX.
+ */
+
+// 1. 基础环境定义
+define('IN_WELLCMS', true);
+define('SWOOLE_MODE', true);
+define('APP_PATH', str_replace('\\', DIRECTORY_SEPARATOR, dirname(__DIR__)) . DIRECTORY_SEPARATOR);
+define('DEBUG', 0); // 生产环境建议设为 0，开发调试建议设为 1 或 2
+
+if (DEBUG >= 2) {
+    error_reporting(E_ALL);
+    ini_set('display_errors', '1');
+} elseif (1 === DEBUG) {
+    error_reporting(E_ALL & ~E_NOTICE & ~E_DEPRECATED);
+    ini_set('display_errors', '1');
+} else {
+    error_reporting(0);
+    ini_set('display_errors', '0');
+}
+
+// 2. 解析参数 (极客模式)
+$options = getopt('h:p:d', ['host:', 'port:', 'daemon']);
+$host    = $options['h'] ?? $options['host'] ?? '0.0.0.0';
+$port    = (int)($options['p'] ?? $options['port'] ?? 9501);
+$daemon  = isset($options['d']) || isset($options['daemon']);
+
+// 3. 核心加载
+require APP_PATH . 'app/Core/Compile.php';
+require APP_PATH . 'app/Core/Autoload.php';
+
+/**
+ * 终端色彩输出
+ */
+function console_log(string $msg, string $color = '32'): void
+{
+    echo "\033[{$color}m{$msg}\033[0m\n";
+}
+
+/**
+ * 信号发送代理
+ */
+function send_signal(int $pid, int $signal): bool
+{
+    if (function_exists('posix_kill')) {
+        return @posix_kill($pid, $signal);
+    }
+    return false;
+}
+
+/**
+ * 环境检查
+ */
+function check_environment(): void
+{
+    if (!extension_loaded('swoole')) {
+        console_log("[ERROR] Swoole extension is required.", '31');
+        exit(1);
+    }
+    if (version_compare(phpversion(), '7.2.0', '<')) {
+        console_log("[ERROR] PHP 7.2.0 or higher is required.", '31');
+        exit(1);
+    }
+}
+
+$action = $argv[1] ?? 'status';
+
+try {
+    switch ($action) {
+        case 'start':
+            check_environment();
+            $pidFile = \Framework\Utils\Runtime::getPidFile();
+            if (file_exists($pidFile)) {
+                $pid = (int)file_get_contents($pidFile);
+                if ($pid > 0 && send_signal($pid, 0)) {
+                    console_log("[ALREADY RUNNING] WellCMS Server is active at PID:$pid", '33');
+                    exit(0);
+                }
+                @unlink($pidFile);
+            }
+
+            $server = new \Framework\Http\SwooleServer($host, $port, ['daemonize' => $daemon]);
+            $server->start();
+            break;
+
+        case 'stop':
+            $pidFile = \Framework\Utils\Runtime::getPidFile();
+            if (file_exists($pidFile)) {
+                $pid = (int)file_get_contents($pidFile);
+                $signal = defined('SIGTERM') ? SIGTERM : 15;
+                if (send_signal($pid, $signal)) {
+                    console_log("[STOPPING] WellCMS Server (PID:$pid)...", '33');
+                    // 循环等待进程完全关闭端口
+                    $limit = 5;
+                    while ($limit > 0 && send_signal($pid, 0)) {
+                        sleep(1);
+                        $limit--;
+                    }
+                    console_log("[SUCCESS] Server stopped.", '32');
+                } else {
+                    console_log("[WARNING] Failed to send signal. Stale PID file cleaned.", '33');
+                }
+                @unlink($pidFile);
+            } else {
+                console_log("[INFO] WellCMS Server is not running.", '36');
+            }
+            break;
+
+        case 'restart':
+            // 优雅重启流程
+            passthru("php " . __FILE__ . " stop");
+            sleep(1);
+            passthru("php " . __FILE__ . " start " . ($daemon ? "-d" : ""));
+            break;
+
+        case 'reload':
+            \Framework\Utils\Runtime::reload();
+            console_log("[RELOAD] Worker processes are being restarted gracefully.", '32');
+            break;
+
+        case 'status':
+            $pidFile = \Framework\Utils\Runtime::getPidFile();
+            console_log("--------------------------------------------------", '36');
+            console_log(" WellCMS 3.0 Swoole Server Status ", '36');
+            console_log("--------------------------------------------------", '36');
+            if (file_exists($pidFile)) {
+                $pid = (int)file_get_contents($pidFile);
+                if ($pid > 0 && send_signal($pid, 0)) {
+                    console_log(" Status:       Running", '32');
+                    console_log(" Master PID:   [ $pid ]", '32');
+                    console_log(" Root Path:    " . APP_PATH, '37');
+                } else {
+                    console_log(" Status:       Stopped (Stale PID file detected)", '33');
+                }
+            } else {
+                console_log(" Status:       Stopped", '31');
+            }
+            console_log("--------------------------------------------------", '36');
+            break;
+
+        default:
+            echo "Usage: php bin/well-server {start|stop|restart|reload|status} [-d] [-h host] [-p port]\n";
+            echo "Options:\n";
+            echo "  -d, --daemon    Run in background\n";
+            echo "  -h, --host      Listen host (default: 0.0.0.0)\n";
+            echo "  -p, --port      Listen port (default: 9501)\n";
+            break;
+    }
+} catch (\Throwable $e) {
+    console_log("[FATAL ERROR] " . $e->getMessage(), '41');
+    echo $e->getTraceAsString() . "\n";
+    exit(1);
+}

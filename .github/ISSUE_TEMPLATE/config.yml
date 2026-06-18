@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 🤔 使用问题或讨论
+    url: https://github.com/your-org/wellcms/discussions
+    about: 如果你有使用上的疑问或想进行一般性讨论，请访问 Discussions。
