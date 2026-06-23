@@ -134,23 +134,23 @@
 				<?php if ($item['operation_links']['enable']) { ?>
 				<a href="<?php echo $item['operation_links']['enable']['url'];?>"
 					data-confirm="<?php echo $item['operation_links']['enable']['confirm'];?>"
-					class="ajax-get px-3 py-1.5 text-xs font-bold text-blue-600 bg-blue-50 dark:bg-blue-900/20 dark:text-blue-400 rounded-lg hover:bg-blue-600 hover:text-white transition-all">
+					data-arg='<?php echo json_encode($item['operation_links']['enable']['arg']); ?>'
+					class="ajax-post px-3 py-1.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-lg shadow-emerald-500/30 transition-all transform active:scale-95">
 					<?php echo $item['operation_links']['enable']['label'];?>
 				</a>
 				<?php } ?>
-
 				<?php if ($item['operation_links']['disable']) { ?>
 				<a href="<?php echo $item['operation_links']['disable']['url'];?>"
 					data-confirm="<?php echo $item['operation_links']['disable']['confirm'];?>"
-					class="ajax-get px-3 py-1.5 text-xs font-bold text-gray-600 bg-gray-100 dark:bg-white/5 dark:text-gray-400 rounded-lg hover:bg-gray-600 hover:text-white transition-all">
+					data-arg='<?php echo json_encode($item['operation_links']['disable']['arg']); ?>'
+					class="ajax-post px-3 py-1.5 text-xs font-bold text-white bg-amber-500 hover:bg-amber-600 rounded-lg shadow-lg shadow-amber-500/30 transition-all transform active:scale-95">
 					<?php echo $item['operation_links']['disable']['label'];?>
 				</a>
 				<?php } ?>
-
 				<?php if ($item['operation_links']['upgrade']) { ?>
 				<a href="<?php echo $item['operation_links']['upgrade']['url'];?>"
 					data-confirm="<?php echo $item['operation_links']['upgrade']['confirm'];?>"
-					class="ajax-get px-3 py-1.5 text-xs font-bold text-white bg-green-600 rounded-lg hover:bg-green-700 shadow-lg shadow-green-500/20 transition-all transform active:scale-95">
+					class="px-3 py-1.5 text-xs font-bold text-white bg-green-600 rounded-lg hover:bg-green-700 shadow-lg shadow-green-500/20 transition-all transform active:scale-95">
 					<?php echo $item['operation_links']['upgrade']['label'];?>
 				</a>
 				<?php } ?>
@@ -158,19 +158,19 @@
 				<?php if ($item['operation_links']['install']) { ?>
 				<a href="<?php echo $item['operation_links']['install']['url'];?>"
 					data-confirm="<?php echo $item['operation_links']['install']['confirm'];?>"
-					class="ajax-get px-3 py-1.5 text-xs font-bold text-white bg-blue-600 rounded-lg hover:bg-blue-700 shadow-lg shadow-blue-500/30 transition-all transform active:scale-95">
+					data-arg='<?php echo json_encode($item['operation_links']['install']['arg']); ?>'
+					class="ajax-post px-3 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-lg shadow-blue-500/30 transition-all transform active:scale-95">
 					<?php echo $item['operation_links']['install']['label'];?>
 				</a>
 				<?php } ?>
-
 				<?php if ($item['operation_links']['uninstall']) { ?>
 				<a href="<?php echo $item['operation_links']['uninstall']['url'];?>"
 					data-confirm="<?php echo $item['operation_links']['uninstall']['confirm'];?>"
-					class="ajax-get px-3 py-1.5 text-xs font-bold text-red-600 hover:bg-red-600 hover:text-white rounded-lg transition-all">
+					data-arg='<?php echo json_encode($item['operation_links']['uninstall']['arg']); ?>'
+					class="ajax-post px-3 py-1.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-lg shadow-lg shadow-rose-500/30 transition-all transform active:scale-95">
 					<?php echo $item['operation_links']['uninstall']['label'];?>
 				</a>
-				<?php } ?>
-			</div>
+				<?php } ?>			</div>
 		</div>
 	</div>
 	<?php } ?>

@@ -71,6 +71,7 @@ class ThemeController extends BaseController
     public function list(\Framework\Http\Interfaces\ServerRequestInterface $request): ResponseInterface
     {
         $user = $request->getAttribute('user', []);
+        $csrfToken = $this->getCsrfToken($user['salt']);
         $page = (int)RequestUtils::param('page', 1);
         $pageSize = 20;
 
@@ -100,6 +101,27 @@ class ThemeController extends BaseController
             $themeList = [$currentThemeDir => $current] + $themeList;
         }
 
+        // 注入操作参数（dir + csrf_token）
+        foreach ($themeList as $index => $item) {
+            $ops = &$themeList[$index]['operation_links'];
+            foreach (['install', 'uninstall'] as $action) {
+                if (!empty($ops[$action])) {
+                    $ops[$action]['arg'] = ['dir' => $item['dir'], '_csrf_token' => $csrfToken];
+                }
+            }
+            if (!empty($item['children'])) {
+                foreach ($themeList[$index]['children'] as $ci => $child) {
+                    $cops = &$themeList[$index]['children'][$ci]['operation_links'];
+                    foreach (['install', 'uninstall'] as $action) {
+                        if (!empty($cops[$action])) {
+                            $cops[$action]['arg'] = ['dir' => $child['dir'] ?? $ci, '_csrf_token' => $csrfToken];
+                        }
+                    }
+                }
+            }
+        }
+        unset($ops, $cops);
+
         $allThemeList = ArrayHelper::arrayListConditionOrderBy($this->localThemes, $condition, [], 1, 1000);
         $totalItems = count($allThemeList);
         //$totalPages = (int)ceil($totalItems / $pageSize);
@@ -127,7 +149,7 @@ class ThemeController extends BaseController
                 'searchType' => $searchType,
                 'keywords' => $keywords,
             ],
-            'csrf_token' => $this->getCsrfToken($user['salt']),
+            'csrf_token' => $csrfToken,
             'config' => [
                 'rewrite' => $this->appConfig['url_rewrite_on'],
                 'path' => $this->appConfig['path'],
@@ -138,6 +160,10 @@ class ThemeController extends BaseController
                 'none' => $this->language->get('none'),
                 'previous' => $this->language->get('previous'),
                 'next' => $this->language->get('next'),
+                'install' => $this->language->get('install'),
+                'uninstall' => $this->language->get('uninstall'),
+                'upgrade' => $this->language->get('upgrade'),
+                'official' => $this->language->get('official'),
                 'confirm_uninstall' => $this->language->get('theme_uninstall_confirm_tip'),
             ]
         ];
@@ -152,6 +178,7 @@ class ThemeController extends BaseController
     public function detail(\Framework\Http\Interfaces\ServerRequestInterface $request): ResponseInterface
     {
         $user = $request->getAttribute('user', []);
+        $csrfToken = $this->getCsrfToken($user['salt']);
         $dir = SafeHelper::safeWord(RequestUtils::param('dir'));
         $extra = ['dir' => $dir];
 
@@ -173,6 +200,11 @@ class ThemeController extends BaseController
         }
 
         $read['operation_links'] = $this->extensionManager->buildOperationLinks($read);
+        foreach (['install', 'uninstall'] as $action) {
+            if (!empty($read['operation_links'][$action])) {
+                $read['operation_links'][$action]['arg'] = ['dir' => $dir, '_csrf_token' => $csrfToken];
+            }
+        }
 
         $menu = $this->getAdminMenu();
         $page_link_string = 'admin/theme/detail';
@@ -185,7 +217,7 @@ class ThemeController extends BaseController
             'menu' => $menu,
             'menu_fixed' => ['parent' => 'AppCenter', 'child' => 'theme'],
             'extra' => $extra,
-            'csrf_token' => $this->getCsrfToken($user['salt']),
+            'csrf_token' => $csrfToken,
             'page_link' => $this->urlGenerator->url($page_link_string, $extra),
             'page_link_string' => $page_link_string,
             'signin' => $isLogged,
@@ -261,11 +293,6 @@ class ThemeController extends BaseController
         return $this->handleAction($request, 'install');
     }
 
-    public function enable(\Framework\Http\Interfaces\ServerRequestInterface $request): ResponseInterface
-    {
-        return $this->handleAction($request, 'enable');
-    }
-
     public function uninstall(\Framework\Http\Interfaces\ServerRequestInterface $request): ResponseInterface
     {
         return $this->handleAction($request, 'uninstall');
@@ -290,7 +317,24 @@ class ThemeController extends BaseController
         }
 
         $langKey = 'theme_' . $action . '_success';
-        return $this->successMessage($this->language->get($langKey, ['name' => $res['name']]), 0, RequestUtils::server('HTTP_REFERER'), 2);
+        $msgData = [
+            'status'  => 'success',
+            'code'    => 0,
+            'message' => $this->language->get($langKey, ['name' => $res['name']]),
+            'data'    => [
+                'redirect' => [
+                    'url'   => RequestUtils::server('HTTP_REFERER'),
+                    'delay' => 2,
+                ],
+            ],
+        ];
+
+        // AJAX 请求返回 JSON，ajax-get 处理器可正确解析
+        if ($request->getHeaderLine('X-Requested-With') === 'XMLHttpRequest') {
+            return $this->responseFormatter->jsonResponseFormat($msgData);
+        }
+
+        return $this->successMessage($msgData['message'], 0, $msgData['data']['redirect']['url'], $msgData['data']['redirect']['delay']);
     }
 
     private function getLocalThemes(): array
@@ -318,6 +362,11 @@ class ThemeController extends BaseController
                 'name' => $this->language->get('not_installed'),
                 'type' => 2,
                 'url' => $this->urlGenerator->url('admin/theme/list', ['type' => 2])
+            ],
+            3 => [
+                'name' => $this->language->get('disable'),
+                'type' => 3,
+                'url' => $this->urlGenerator->url('admin/theme/list', ['type' => 3])
             ]
         ];
     }
@@ -329,6 +378,8 @@ class ThemeController extends BaseController
                 return ['installed' => 1, 'enable' => 1];
             case 2:
                 return ['installed' => 0, 'enable' => 0];
+            case 3:
+                return ['installed' => 1, 'enable' => 0];
             default:
                 return [];
         }

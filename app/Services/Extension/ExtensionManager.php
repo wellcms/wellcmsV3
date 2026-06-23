@@ -142,10 +142,17 @@ class ExtensionManager
                 'url' => $this->urlGenerator->url('admin/' . $type . '/detail', $extra)
             ];
 
-            $links['install'] = (0 === (int)$data['installed']) ? ['label' => $this->language->get('install'), 'url' => $this->urlGenerator->url('admin/' . $type . '/install', $extra)] : '';
+            // 主题仅未安装时显示 install（已安装时只显示 uninstall）
+            if ('theme' === $type) {
+                if (0 === (int)$data['installed']) {
+                    $links['install'] = ['label' => $this->language->get('install'), 'url' => $this->urlGenerator->url('admin/theme/postInstall', $extra)];
+                }
+            } else {
+                $links['install'] = (0 === (int)$data['installed']) ? ['label' => $this->language->get('install'), 'url' => $this->urlGenerator->url('admin/plugin/postInstall', $extra)] : '';
+            }
 
             if (1 === (int)$data['installed']) {
-                $links['uninstall'] = ['label' => $this->language->get('uninstall'), 'url' => $this->urlGenerator->url('admin/' . $type . '/uninstall', $extra)];
+                $links['uninstall'] = ['label' => $this->language->get('uninstall'), 'url' => $this->urlGenerator->url('admin/' . $type . '/postUninstall', $extra)];
 
                 $settingFile = $this->getBasePath($type) . $dir . '/setting.php';
                 if (file_exists($settingFile)) {
@@ -154,15 +161,12 @@ class ExtensionManager
             }
 
             if ('plugin' === $type && 1 === (int)$data['installed']) {
-                $links['enable'] = (0 === (int)$data['enable']) ? ['label' => $this->language->get('enable'), 'url' => $this->urlGenerator->url('admin/plugin/enable', $extra)] : '';
+                $links['enable'] = (0 === (int)$data['enable']) ? ['label' => $this->language->get('enable'), 'url' => $this->urlGenerator->url('admin/plugin/postEnable', $extra)] : '';
 
-                $links['disable'] = (1 === (int)$data['enable']) ? ['label' => $this->language->get('disable'), 'url' => $this->urlGenerator->url('admin/plugin/disable', $extra)] : '';
+                $links['disable'] = (1 === (int)$data['enable']) ? ['label' => $this->language->get('disable'), 'url' => $this->urlGenerator->url('admin/plugin/postDisable', $extra)] : '';
             }
 
-            // 主题切换：已安装但非当前主题时，显示启用入口
-            if ('theme' === $type && 1 === (int)$data['installed'] && 0 === (int)$data['enable']) {
-                $links['enable'] = ['label' => $this->language->get('enable'), 'url' => $this->urlGenerator->url('admin/theme/enable', $extra)];
-            }
+            // 主题无启用/禁用概念，通过 install 切换激活
 
             $links['upgrade'] = (1 === (int)$data['installed'] && ($data['has_upgrade'] ?? false)) ? ['label' => $this->language->get('upgrade'), 'url' => $this->urlGenerator->url('admin/store/upgrade', $extra)] : '';
         } else {
@@ -182,6 +186,14 @@ class ExtensionManager
                 $links['download'] = ['label' => $this->language->get('download'), 'url' => $this->urlGenerator->url('admin/store/download', $extra)];
             }
         }
+
+        // 防御：确保所有链接数组包含 confirm 键，防止模板直接访问时 Undefined array key
+        foreach ($links as &$link) {
+            if (is_array($link) && !isset($link['confirm'])) {
+                $link['confirm'] = '';
+            }
+        }
+        unset($link);
 
         return $links;
     }
@@ -428,7 +440,17 @@ class ExtensionManager
             // 主题状态变更同步至 KV 层（须在编译缓存清理前完成）
             if ($type === 'theme') {
                 $config = $this->kv->settingGet('config') ?? [];
-                if (in_array($action, ['install', 'enable'])) {
+                if ($action === 'install') {
+                    // ★ 旧主题降权：切换时标记为未安装（直接写 config.json，不跑脚本）
+                    $oldTheme = $config['theme'] ?? '';
+                    if ($oldTheme !== '' && $oldTheme !== $dir) {
+                        // 不卸载依赖关系：新主题依赖旧主题时（如子主题安装），保留父主题
+                        $newDeps = $localList[$dir]['dependencies_theme'] ?? [];
+                        $dependsOnOld = isset($newDeps[$oldTheme]) || in_array($oldTheme, $newDeps);
+                        if (!$dependsOnOld) {
+                            $this->markThemeUninstalled($oldTheme);
+                        }
+                    }
                     $config['theme'] = $dir;
                     $this->kv->settingSet('config', $config);
                 } elseif ($action === 'uninstall') {
@@ -504,6 +526,82 @@ class ExtensionManager
 
         \Framework\Utils\Runtime::reload();
         return ['status' => 'success', 'dir' => $dir];
+    }
+
+    /**
+     * 将主题标记为未安装（直接写 config.json，不执行 uninstall 脚本）
+     * 同时清理依赖该主题的子主题
+     */
+    private function markThemeUninstalled(string $dir): void
+    {
+        $basePath = $this->getBasePath('theme');
+        // 自身标记为未安装
+        $configFile = $basePath . $dir . DIRECTORY_SEPARATOR . 'config.json';
+        if (file_exists($configFile)) {
+            $json = (string)file_get_contents($configFile);
+            $config = \Framework\Utils\SecurityHelper::jsonDecode($json);
+            $config['installed'] = 0;
+            $config['enable'] = 0;
+            file_put_contents($configFile, \Framework\Utils\SecurityHelper::jsonEncode($config, true));
+        }
+
+        // 查找并清理依赖该主题的子主题，记录被清理的目录
+        $uninstalledChildren = [$dir];
+        $allThemes = $this->getLocalList('theme');
+        foreach ($allThemes as $tDir => $tInfo) {
+            if ($tDir === $dir) continue;
+            $deps = $tInfo['dependencies_theme'] ?? [];
+            if (isset($deps[$dir]) || in_array($dir, $deps)) {
+                $childFile = $basePath . $tDir . DIRECTORY_SEPARATOR . 'config.json';
+                if (file_exists($childFile)) {
+                    $json = (string)file_get_contents($childFile);
+                    $cfg = \Framework\Utils\SecurityHelper::jsonDecode($json);
+                    $cfg['installed'] = 0;
+                    $cfg['enable'] = 0;
+                    file_put_contents($childFile, \Framework\Utils\SecurityHelper::jsonEncode($cfg, true));
+                }
+                $uninstalledChildren[] = $tDir;
+            }
+        }
+
+        // 级联清理：该主题的父依赖若无其他已安装子主题引用，也标记为未安装
+        $parentDeps = $allThemes[$dir]['dependencies_theme'] ?? [];
+        $queue = [];
+        if (is_array($parentDeps)) {
+            foreach ($parentDeps as $k => $v) {
+                // dependencies_theme 格式: ['parent_dir' => '1.0'] 或 ['parent_dir']
+                $queue[] = is_string($k) && !is_numeric($k) ? $k : (is_string($v) ? $v : '');
+            }
+        }
+        $visited = [];
+        while (!empty($queue)) {
+            $pDir = array_shift($queue);
+            if (empty($pDir) || $pDir === $dir || in_array($pDir, $visited)) continue;
+            $visited[] = $pDir;
+            // 检查是否还有其他已安装主题依赖此父主题（排除本次已卸载的）
+            $stillNeeded = false;
+            foreach ($allThemes as $tDir2 => $tInfo2) {
+                if ($tDir2 === $pDir || in_array($tDir2, $uninstalledChildren)) continue;
+                $deps2 = $tInfo2['dependencies_theme'] ?? [];
+                $hasInstalled = isset($tInfo2['installed']) && (int)$tInfo2['installed'] === 1;
+                if (!$hasInstalled) continue;
+                if (isset($deps2[$pDir]) || in_array($pDir, $deps2)) {
+                    $stillNeeded = true;
+                    break;
+                }
+            }
+            if (!$stillNeeded) {
+                $parentFile = $basePath . $pDir . DIRECTORY_SEPARATOR . 'config.json';
+                if (file_exists($parentFile)) {
+                    $json = (string)file_get_contents($parentFile);
+                    $cfg = \Framework\Utils\SecurityHelper::jsonDecode($json);
+                    $cfg['installed'] = 0;
+                    $cfg['enable'] = 0;
+                    file_put_contents($parentFile, \Framework\Utils\SecurityHelper::jsonEncode($cfg, true));
+                }
+                $uninstalledChildren[] = $pDir;
+            }
+        }
     }
 
     private function runActionScript(string $dir, string $type, string $action): void

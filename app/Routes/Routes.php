@@ -202,10 +202,10 @@ Router::group(['prefix' => '/admin'], function () {
         ], function () {
             Router::get('/list', [PluginController::class, 'list'], ['layout' => 'plugin_list']);
             Router::get('/detail', [PluginController::class, 'detail'], ['layout' => 'plugin_detail']);
-            Router::get('/install', [PluginController::class, 'install']);
-            Router::get('/uninstall', [PluginController::class, 'uninstall']);
-            Router::get('/enable', [PluginController::class, 'enable']);
-            Router::get('/disable', [PluginController::class, 'disable']);
+            Router::post('/postInstall', [PluginController::class, 'install'], ['requiresCsrf' => ['enable' => true, 'ttl' => 3600]]);
+            Router::post('/postUninstall', [PluginController::class, 'uninstall'], ['requiresCsrf' => ['enable' => true, 'ttl' => 3600]]);
+            Router::post('/postEnable', [PluginController::class, 'enable'], ['requiresCsrf' => ['enable' => true, 'ttl' => 3600]]);
+            Router::post('/postDisable', [PluginController::class, 'disable'], ['requiresCsrf' => ['enable' => true, 'ttl' => 3600]]);
             Router::get('/setting', [PluginController::class, 'setting'], ['layout' => 'setting']);
             Router::post('/postSetting', [PluginController::class, 'postSetting'], ['requiresCsrf' => ['enable' => true, 'ttl' => 3600]]);
         });
@@ -217,9 +217,8 @@ Router::group(['prefix' => '/admin'], function () {
         ], function () {
             Router::get('/list', [ThemeController::class, 'list'], ['layout' => 'theme_list']);
             Router::get('/detail', [ThemeController::class, 'detail'], ['layout' => 'plugin_detail']);
-            Router::get('/install', [ThemeController::class, 'install']);
-            Router::get('/enable', [ThemeController::class, 'enable']);
-            Router::get('/uninstall', [ThemeController::class, 'uninstall']);
+            Router::post('/postInstall', [ThemeController::class, 'install'], ['requiresCsrf' => ['enable' => true, 'ttl' => 3600]]);
+            Router::post('/postUninstall', [ThemeController::class, 'uninstall'], ['requiresCsrf' => ['enable' => true, 'ttl' => 3600]]);
             Router::get('/setting', [ThemeController::class, 'setting'], ['layout' => 'setting']);
             Router::get('/postSetting', [ThemeController::class, 'postSetting'], ['requiresCsrf' => ['enable' => true, 'ttl' => 3600]]);
         });

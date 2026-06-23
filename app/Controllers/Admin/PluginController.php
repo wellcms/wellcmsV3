@@ -71,6 +71,7 @@ class PluginController extends BaseController
     public function list(\Framework\Http\Interfaces\ServerRequestInterface $request): ResponseInterface
     {
         $user = $request->getAttribute('user', []);
+        $csrfToken = $this->getCsrfToken($user['salt']);
         $page = (int)RequestUtils::param('page', 1);
         $pageSize = 20;
 
@@ -95,6 +96,7 @@ class PluginController extends BaseController
             foreach (['enable', 'disable', 'install', 'uninstall'] as $action) {
                 if (!empty($ops[$action])) {
                     $ops[$action]['confirm'] = $this->language->get('plugin_' . $action . '_confirm_tip', ['name' => $name]);
+                    $ops[$action]['arg'] = ['dir' => $item['dir'], '_csrf_token' => $csrfToken];
                 }
             }
             if (!empty($ops['upgrade'])) {
@@ -133,7 +135,7 @@ class PluginController extends BaseController
                 'searchType' => $searchType,
                 'keywords' => $keywords,
             ],
-            'csrf_token' => $this->getCsrfToken($user['salt']),
+            'csrf_token' => $csrfToken,
             'config' => [
                 'rewrite' => $this->appConfig['url_rewrite_on'],
                 'path' => $this->appConfig['path'],
@@ -168,6 +170,7 @@ class PluginController extends BaseController
     public function detail(\Framework\Http\Interfaces\ServerRequestInterface $request): ResponseInterface
     {
         $user = $request->getAttribute('user', []);
+        $csrfToken = $this->getCsrfToken($user['salt']);
         $dir = SafeHelper::safeWord(RequestUtils::param('dir'));
         $extra = ['dir' => $dir];
 
@@ -192,6 +195,11 @@ class PluginController extends BaseController
         $read['icon_url'] = $this->extensionManager->getIconUrl($dir, $this->currentType, $read['icon'] ?? '');
 
         $read['operation_links'] = $this->extensionManager->buildOperationLinks($read);
+        foreach (['enable', 'disable', 'install', 'uninstall'] as $action) {
+            if (!empty($read['operation_links'][$action])) {
+                $read['operation_links'][$action]['arg'] = ['dir' => $dir, '_csrf_token' => $csrfToken];
+            }
+        }
 
         $menu = $this->getAdminMenu();
         $page_link_string = 'admin/plugin/detail';
@@ -204,7 +212,7 @@ class PluginController extends BaseController
             'menu' => $menu,
             'menu_fixed' => ['parent' => 'AppCenter', 'child' => 'plugin'],
             'extra' => $extra,
-            'csrf_token' => $this->getCsrfToken($user['salt']),
+            'csrf_token' => $csrfToken,
             'page_link' => $this->urlGenerator->url($page_link_string, $extra),
             'page_link_string' => $page_link_string,
             'signin' => $isLogged,
@@ -327,6 +335,23 @@ class PluginController extends BaseController
         }
 
         $msg = $action === 'uninstall' ? $this->language->get('plugin_' . $action . '_success', ['name' => $res['name'], 'dir' => $dir]) : $this->language->get('plugin_' . $action . '_success', ['name' => $res['name']]);
+        $msgData = [
+            'status'  => 'success',
+            'code'    => 0,
+            'message' => $msg,
+            'data'    => [
+                'redirect' => [
+                    'url'   => RequestUtils::server('HTTP_REFERER'),
+                    'delay' => 2,
+                ],
+            ],
+        ];
+
+        // AJAX 请求返回 JSON，ajax-get 处理器可正确解析
+        if ($request->getHeaderLine('X-Requested-With') === 'XMLHttpRequest') {
+            return $this->responseFormatter->jsonResponseFormat($msgData);
+        }
+
         return $this->successMessage($msg, 0, RequestUtils::server('HTTP_REFERER'), 2);
     }
 
@@ -338,60 +363,6 @@ class PluginController extends BaseController
 
         $user = $request->getAttribute('user', []);
         $action = RequestUtils::get('action', 'setting');
-        /* switch ($action) {
-            case 'setting':
-                if ('GET' === $method) {
-                    $csrfToken = $this->getCsrfToken($user['salt']);
-                    // 获取导航栏信息
-                    $menu = $this->getAdminMenu();
-                    $extra = ['dir' => $dir, 'action' => 'setting', 'csrf_token' => $csrfToken];
-                    $r = $this->localPlugins[$dir];
-                    $page_link_string = 'admin/plugin/setting'; // 当前页链接字符串
-                    $data = [
-                        'header' => [
-                            'title' => $this->language->get('plugin_detail') . '-' . $r['name'],
-                            'keywords' => $this->language->get('plugin_detail') . '-' . $r['name'],
-                            'description' => $this->language->get('plugin_detail'),
-                        ],
-                        'menu' => $menu,
-                        'menu_fixed' => ['parent' => 'AppCenter', 'child' => 'plugin'],
-                        'extra' => $extra,
-                        'csrf_token' => $csrfToken,
-                        'page_link' => $this->urlGenerator->url($page_link_string, $extra),
-                        'page_link_string' => $page_link_string,
-                        'have_upgrade_url' => $this->urlGenerator->url('admin/plugin/upgrade', $extra),
-                        'action' => $this->urlGenerator->url('admin/plugin/postSetting', $extra),
-                        'plugin_info' => $r,
-                        'language' => [
-                            'brief' => $this->language->get('brief'),
-                            'plugin_version' => $this->language->get('plugin_version'),
-                            'price' => $this->language->get('price'),
-                            'installs' => $this->language->get('installs'),
-                            'signin_tip' => $this->language->get('plugin_signin_tip'),
-                            'email' => $this->language->get('email'),
-                            'username' => $this->language->get('username'),
-                            'password' => $this->language->get('password'),
-                            'submit' => $this->language->get('submit'),
-                        ]
-                    ];
-                    echo '<pre>';
-                    print_r($data);
-                    echo '<hr>';
-                    print_r(date('Y-m-d H:i:s'));
-                    echo '<hr>';
-                    var_dump($action);
-                    echo '<hr>';
-                    echo '</pre>';
-                    exit;
-                    $routeMeta = $request->getAttributes()['_route_meta'] ?? ['layout' => 'setting'];
-                    return $this->render($routeMeta['layout'], $data, $dir);
-                } elseif ('POST' === $method) {
-                }
-                break;
-            default:
-                return $this->errorMessage($this->language->get('data_malformation'), 2, RequestUtils::server('HTTP_REFERER'));
-                break;
-        } */
 
         $settingFile = $this->extensionManager->getBasePath($this->currentType) . $dir . '/setting.php';
         if (!file_exists($settingFile)) return $this->errorMessage($this->language->get('params_error'), 4);
@@ -417,7 +388,7 @@ class PluginController extends BaseController
 
     public function postSetting(\Framework\Http\Interfaces\ServerRequestInterface $request): ResponseInterface
     {
-        return $this->setting($request, $method = 'POST');
+        return $this->setting($request, 'POST');
     }
 
     private function buildStatusCategories(): array

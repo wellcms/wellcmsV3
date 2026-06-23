@@ -109,38 +109,29 @@
 						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
 							d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
 					</svg>
-					<?php echo $item['author'] ?: 'Official'; ?>
+					<?php echo $item['author'] ?: $view->get('language.official'); ?>
 				</div>
 
 				<div class="flex gap-2">
 					<?php if (!empty($item['operation_links']['upgrade']['url'])) { ?>
 					<a href="<?php echo $item['operation_links']['upgrade']['url'];?>"
-						data-confirm="Upgrade theme to v<?php echo $item['cloud_version']; ?>?"
+						data-confirm="<?php echo $view->get('language.upgrade');?> to v<?php echo $item['cloud_version']; ?>?"
 						class="ajax-get px-3 py-1.5 text-xs font-bold text-white bg-green-600 rounded-lg hover:bg-green-700 shadow-lg shadow-green-500/20 transition-all transform active:scale-95">
-						Update
+						<?php echo $view->get('language.upgrade');?>
 					</a>
 					<?php } ?>
 
-					<?php if (!empty($item['operation_links']['enable']['url'])) { ?>
-					<a href="<?php echo $item['operation_links']['enable']['url'];?>"
-						class="ajax-get px-3 py-1.5 text-xs font-bold text-white bg-blue-600 rounded-lg hover:bg-blue-700 shadow-lg shadow-blue-500/30 transition-all transform active:scale-95">
-						<?php echo $item['operation_links']['enable']['label']; ?>
-					</a>
-					<?php } ?>
 
-					<?php if (!empty($item['operation_links']['install']['url'])) { ?>
+					<?php if (!empty($item['operation_links']['install'])) { ?>
 					<a href="<?php echo $item['operation_links']['install']['url'];?>"
-						class="ajax-get px-3 py-1.5 text-xs font-bold text-white bg-blue-600 rounded-lg hover:bg-blue-700 shadow-lg shadow-blue-500/30 transition-all transform active:scale-95">
-						Active
-					</a>
+						data-arg='<?php echo json_encode($item['operation_links']['install']['arg']); ?>'
+						class="ajax-post px-3 py-1.5 text-xs font-bold text-white bg-blue-600 rounded-lg hover:bg-blue-700 shadow-lg shadow-blue-500/30 transition-all transform active:scale-95"><?php echo $view->get('language.install');?></a>
 					<?php } ?>
-
-					<?php if (!empty($item['operation_links']['uninstall']['url'])) { ?>
+					<?php if (!empty($item['operation_links']['uninstall'])) { ?>
 					<a href="<?php echo $item['operation_links']['uninstall']['url'];?>"
 						data-confirm="<?php echo $view->get('language.confirm_uninstall');?>"
-						class="ajax-get px-3 py-1.5 text-xs font-bold text-red-500 bg-red-50 dark:bg-red-900/20 rounded-lg hover:bg-red-500 hover:text-white transition-all">
-						Remove
-					</a>
+						data-arg='<?php echo json_encode($item['operation_links']['uninstall']['arg']); ?>'
+						class="ajax-post px-3 py-1.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-lg shadow-lg shadow-rose-500/30 transition-all transform active:scale-95"><?php echo $view->get('language.uninstall');?></a>
 					<?php } ?>
 				</div>
 			</div>
@@ -155,13 +146,16 @@
 					<span
 						class="text-xs font-medium text-gray-700 dark:text-gray-300"><?php echo $child['name']; ?></span>
 					<div class="flex gap-1">
-						<?php if (!empty($child['operation_links']['install']['url'])) { ?>
+						<?php if (!empty($child['operation_links']['install'])) { ?>
 						<a href="<?php echo $child['operation_links']['install']['url'];?>"
-							class="ajax-get px-2 py-1 text-[10px] font-bold text-blue-600 hover:bg-blue-600 hover:text-white rounded-md transition-all">Active</a>
+							data-arg='<?php echo json_encode($child['operation_links']['install']['arg']); ?>'
+							class="ajax-post px-2 py-1 text-[10px] font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-all"><?php echo $view->get('language.install');?></a>
 						<?php } ?>
-						<?php if (!empty($child['operation_links']['uninstall']['url'])) { ?>
+						<?php if (!empty($child['operation_links']['uninstall'])) { ?>
 						<a href="<?php echo $child['operation_links']['uninstall']['url'];?>"
-							class="ajax-get px-2 py-1 text-[10px] font-bold text-gray-400 hover:bg-red-500 hover:text-white rounded-md transition-all">Off</a>
+							data-confirm="<?php echo $view->get('language.confirm_uninstall');?>"
+							data-arg='<?php echo json_encode($child['operation_links']['uninstall']['arg']); ?>'
+							class="ajax-post px-2 py-1 text-[10px] font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-md transition-all"><?php echo $view->get('language.uninstall');?></a>
 						<?php } ?>
 					</div>
 				</div>
