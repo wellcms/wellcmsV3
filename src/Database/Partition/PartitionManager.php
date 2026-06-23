@@ -422,6 +422,14 @@ class PartitionManager
         $now = time();
         $expectedBoundary = $this->calculateBoundaryAfterAdvance($now, $config);
 
+        // 防御：无数据分区时 maxBoundary=0，锚定到保留期边界，禁止从 epoch(1970) 创建
+        if ($maxBoundary === 0 && $config->retention > 0) {
+            $anchor = PartitionPeriod::ago($now, $config->period, $config->retention);
+            if ($anchor > 0) {
+                $maxBoundary = $anchor;
+            }
+        }
+
         // §11.4 熔断：记录处理前的错误数，用于判断本次操作是否新增错误
         $errorsBefore = $result->errors;
 
@@ -469,6 +477,7 @@ class PartitionManager
                 WHERE TABLE_SCHEMA = " . $pdo->quote($dbName) . "
                   AND TABLE_NAME = " . $pdo->quote($fullTableName) . "
                   AND PARTITION_NAME IS NOT NULL
+                  AND SUBPARTITION_NAME IS NULL
                 ORDER BY PARTITION_ORDINAL_POSITION ASC";
 
         $stmt = $pdo->query($sql);
@@ -538,7 +547,19 @@ class PartitionManager
         MaintenanceResult $result
     ) {
         $boundary = $currentMaxBoundary;
+        $safetyLimit = max($config->advanceCount * 4, 16);
+        $created = 0;
         while ($boundary < $expectedBoundary) {
+            if (++$created > $safetyLimit) {
+                $this->logger->error('PartitionMaintain safety limit exceeded', array(
+                    'table'     => $fullTableName,
+                    'limit'     => $safetyLimit,
+                    'boundary'  => $boundary,
+                    'expected'  => $expectedBoundary,
+                ));
+                $result->errors++;
+                break;
+            }
             $nextBoundary = PartitionPeriod::nextBoundary($boundary, $config->period);
             if ($nextBoundary <= $boundary) {
                 // 防止死循环
@@ -628,6 +649,13 @@ class PartitionManager
 
         if (empty($toDrop)) {
             return;
+        }
+
+        // 防御 MySQL error 1508：禁止删除所有数据分区，至少保留边界值最大的一个
+        // $partitions 包含 pmax，数据分区数 = count($partitions) - 1
+        if (count($toDrop) >= count($partitions) - 1 && count($partitions) > 1) {
+            // $toDrop 按 PARTITION_ORDINAL_POSITION 升序排列，弹出最后一个（最新分区）
+            array_pop($toDrop);
         }
 
         // 拼接 DROP PARTITION SQL

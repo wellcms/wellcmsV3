@@ -14,20 +14,28 @@ class ErrorHandlerMiddleware implements \Framework\Http\Interfaces\MiddlewareInt
 {
     /** @var \Framework\Core\Container */
     protected $container;
+
     /** @var bool */
     protected $debug;
+
+    /** @var array */
+    protected $errorConfig;
+
+    /** @var \App\Services\ErrorResponseBuilder|null */
+    protected $errorBuilder;
+
     /** @var bool */
     private static $registered = false;
 
-    public function __construct(\Framework\Core\Container $container, bool $debug = false)
+    public function __construct(\Framework\Core\Container $container, bool $debug = false, array $errorConfig = [])
     {
         $this->container = $container;
         $this->debug = $debug;
+        $this->errorConfig = $errorConfig;
     }
 
     public function process(\Framework\Http\Interfaces\ServerRequestInterface $request, \Framework\Http\Interfaces\RequestHandlerInterface $handler): ResponseInterface
     {
-        // 1. 注册底层错误句柄 (只需执行一次)
         if (false === self::$registered) {
             set_error_handler([$this, 'handleRawError']);
             register_shutdown_function([$this, 'handleShutdown']);
@@ -38,9 +46,6 @@ class ErrorHandlerMiddleware implements \Framework\Http\Interfaces\MiddlewareInt
             return $handler->handle($request);
         } catch (\Throwable $e) {
             return $this->handleThrowable($e, $request);
-        } finally {
-            // 在常规请求结束时恢复，但在 Swoole 环境下需谨慎，通常建议由 Kernel 统一管理
-            // restore_error_handler();
         }
     }
 
@@ -68,84 +73,93 @@ class ErrorHandlerMiddleware implements \Framework\Http\Interfaces\MiddlewareInt
     }
 
     /**
-     * 核心异常处理逻辑
+     * 审计修订：增加 ErrorResponseBuilder 构造失败的降级路径。
      */
     protected function handleThrowable(\Throwable $e, \Framework\Http\Interfaces\ServerRequestInterface $request): ResponseInterface
     {
-        // 1. 记录日志 (Infra 级别记录 Critical，业务端记录 Warning)
         $this->logThrowable($e);
 
-        // 2. 构造基础响应数据 (兼容 BaseController 格式)
-        $responseData = [
-            'status'    => 'error',
-            'code'      => $e->getCode(),
-            'message'   => $e->getMessage(),
-            'success'   => false,
-            'timestamp' => time(),
-        ];
-
-        // 获取推荐状态码
-        $statusCode = ($e instanceof \Framework\Exception\ExceptionInterface) ? $e->getStatusCode() : 500;
-
-        // 特殊处理：验证异常
-        if ($e instanceof \Framework\Exception\ValidationException) {
-            $responseData['errors'] = $e->getErrors();
-        }
-
-        // 调试模式下增加堆栈信息与 SQL 轨迹
-        if ($this->debug) {
-            $responseData['debug'] = [
-                'exception' => get_class($e),
-                'file' => $e->getFile(),
-                'line' => $e->getLine(),
-                'sql' => \Framework\Database\Collector\QueryCollector::getLoggedQueries(),
-                'trace' => explode("\n", $e->getTraceAsString()),
-            ];
-        }
-
-        // 3. 智能响应格式化 (尝试利用 ResponseFormatter 渲染主题)
         try {
-            if ($this->container->has(\App\Controllers\Base\ResponseFormatter::class)) {
-                $formatter = $this->container->get(\App\Controllers\Base\ResponseFormatter::class);
-                
-                // 构造 BaseController 样式的数据包，包含 UI 元素
-                $fullData = array_merge($responseData, [
-                    'url' => '', // 默认不跳转
-                    'delay' => 3,
-                    'data' => [
-                        'title' => 'System Notice',
-                        'keywords' => 'Notice',
-                        'description' => 'Operation Notice',
-                        'redirect' => null,
-                        'modal' => 1,
-                    ]
-                ]);
-
-                // 获取 message 模板路径
-                $templatePath = '';
-                if ($this->container->has(\App\Controllers\Base\TemplateManager::class)) {
-                    $templatePath = $this->container->get(\App\Controllers\Base\TemplateManager::class)->template(false, 'message', '', $request);
-                }
-
-                // createFormatter 会自动检测请求头并决定 JSON 或 HTML
-                $response = $formatter->createFormatter($fullData, $templatePath, $request);
-                $response = $this->addExceptionHeaders($response, $e);
-                return $response;
+            $builder = $this->getErrorBuilder();
+            $response = $builder->build($e, $request);
+        } catch (\Throwable $builderError) {
+            // Builder 自身异常：记录并降级到最简响应
+            try {
+                $this->logInternalError('ErrorResponseBuilder failed, using fallback', $builderError);
+            } catch (\Throwable $logError) {
+                error_log('ErrorResponseBuilder + log both failed: ' . $logError->getMessage());
             }
-        } catch (\Throwable $internalError) {
-            // 格式化器自身可能因配置缺失或模板丢失报错，记录并走兜底
-            error_log("ErrorHandlerMiddleware Formatter Error: " . $internalError->getMessage());
-        }
 
-        // 4. 熔断降级逻辑 (Formatter 失败或不可用)
-        if ($this->isApiRequest($request)) {
-            $response = $this->createJsonResponse($responseData, $statusCode);
-        } else {
-            $response = $this->createSimpleHtmlResponse($responseData, $statusCode);
+            $response = $this->isApiRequest($request)
+                ? $this->createJsonResponse([
+                    'status'    => 'error',
+                    'code'      => 500,
+                    'message'   => $this->debug ? $e->getMessage() : 'Internal Server Error',
+                    'timestamp' => time(),
+                ], 500)
+                : $this->createSimpleHtmlResponse([
+                    'status'    => 'error',
+                    'code'      => 500,
+                    'message'   => $this->debug ? $e->getMessage() : 'Internal Server Error',
+                    'timestamp' => time(),
+                ], 500);
         }
 
         $response = $this->addExceptionHeaders($response, $e);
         return $response;
+    }
+
+    protected function getErrorBuilder(): \App\Services\ErrorResponseBuilder
+    {
+        if ($this->errorBuilder === null) {
+            $this->errorBuilder = new \App\Services\ErrorResponseBuilder(
+                $this->container,
+                $this->debug,
+                $this->errorConfig
+            );
+        }
+        return $this->errorBuilder;
+    }
+
+    protected function logThrowable(\Throwable $e): void
+    {
+        try {
+            $logger = $this->container->get(\Framework\Logger\LoggerInterface::class);
+            $level = ($e instanceof \Framework\Exception\ExceptionInterface && $e->getStatusCode() < 500)
+                ? 'warning'
+                : 'error';
+
+            $context = [
+                'file' => \App\Utils\PathHelper::relative($e->getFile()),
+                'line' => $e->getLine(),
+                'type' => \get_class($e),
+            ];
+
+            if (\defined('LOG_ABSOLUTE_PATH') && LOG_ABSOLUTE_PATH) {
+                $context['absolute_file'] = $e->getFile();
+            }
+
+            $logger->log($level, $e->getMessage(), $context);
+        } catch (\Throwable $t) {
+            error_log('Failed to log throwable: ' . $t->getMessage());
+        }
+    }
+
+    /**
+     * 审计修订：统一 API 判定逻辑，与 ErrorResponseBuilder::isApiRequest() 完全一致。
+     */
+    private function isApiRequest(\Framework\Http\Interfaces\ServerRequestInterface $request): bool
+    {
+        $params = array_merge($request->getQueryParams(), (array)$request->getParsedBody());
+        $xrw = $request->getHeaderLine('X-Requested-With');
+        $accept = $request->getHeaderLine('Accept');
+        $meta = $request->getAttribute('_route_meta', []);
+
+        return ($xrw && strtolower(trim($xrw)) === 'xmlhttprequest')
+            || (!empty($params['api']))
+            || strpos(strtolower($accept), 'application/json') !== false
+            || strpos(strtolower($accept), 'application/javascript') !== false
+            || (!empty($meta['api']));
     }
 
     /**
@@ -164,20 +178,6 @@ class ErrorHandlerMiddleware implements \Framework\Http\Interfaces\MiddlewareInt
     }
 
     /**
-     * 判断是否为 API/AJAX 请求 (复用 Formatter 识别逻辑)
-     */
-    private function isApiRequest(\Framework\Http\Interfaces\ServerRequestInterface $request): bool
-    {
-        $params = array_merge($request->getQueryParams(), (array)$request->getParsedBody());
-        $httpXRequestedWith = $request->getServerParams()['HTTP_X_REQUESTED_WITH'] ?? '';
-        $accept = $request->getServerParams()['HTTP_ACCEPT'] ?? '';
-        
-        return ($httpXRequestedWith && strtolower(trim($httpXRequestedWith)) == 'xmlhttprequest') 
-            || (isset($params['api']) && $params['api']) 
-            || strpos(strtolower($accept), 'application/json') !== false;
-    }
-
-    /**
      * 极简 HTML 兜底响应
      */
     protected function createSimpleHtmlResponse(array $data, int $statusCode): ResponseInterface
@@ -185,40 +185,50 @@ class ErrorHandlerMiddleware implements \Framework\Http\Interfaces\MiddlewareInt
         $response = new \Framework\Http\Response($statusCode);
         $html = "<html><head><title>Operation Notice</title><meta charset='utf-8'></head>";
         $html .= "<body style='font-family:sans-serif;padding:2rem;background:#f8f9fa;'>";
-        $html .= "<div style='max-width:600px;margin:0 auto;background:#fff;padding:2rem;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,0.1);'>";
+        $html .= "<div style='max-width:1024px;margin:0 auto;background:#fff;padding:2rem;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,0.1);'>";
         $html .= "<h2 style='color:#dc3545;margin-top:0;'>Notice</h2>";
         $html .= "<p style='font-size:1.1rem;'>" . htmlspecialchars($data['message'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . "</p>";
-        
+
         if ($this->debug && isset($data['debug'])) {
             $html .= "<hr style='border:0;border-top:1px solid #eee;margin:2rem 0;'>";
             $html .= "<pre style='background:#f4f4f4;padding:1rem;overflow:auto;font-size:0.9rem;'>";
-            $html .= htmlspecialchars($data['debug']['exception'] . "\n" . implode("\n", $data['debug']['trace']), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+
+            $debugText = ($data['debug']['exception'] ?? '') . "\n"
+                . ($data['debug']['file'] ?? '') . ' : ' . ($data['debug']['line'] ?? '') . "\n\n"
+                . json_encode($data['debug']['trace'] ?? [], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+
+            $html .= htmlspecialchars($debugText, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
             $html .= "</pre>";
         }
-        
+
         $html .= "</div></body></html>";
-        
+
         $response->getBody()->write($html);
         return $response->withHeader('Content-Type', 'text/html; charset=utf-8');
     }
 
-    protected function logThrowable(\Throwable $e): void
+    /**
+     * 记录格式化器内部错误，优先使用主程序 Logger，失败时降级到 error_log
+     */
+    protected function logInternalError(string $message, \Throwable $e): void
     {
-        $logger = $this->container->get(\Framework\Logger\LoggerInterface::class);
-        $level = ($e instanceof \Framework\Exception\ExceptionInterface && $e->getStatusCode() < 500) ? 'info' : 'error';
-        
-        $logger->log($level, $e->getMessage(), [
-            'file' => $e->getFile(),
-            'line' => $e->getLine(),
-            'type' => get_class($e)
-        ]);
+        try {
+            $logger = $this->container->get(\Framework\Logger\LoggerInterface::class);
+            $logger->error($message . ': ' . $e->getMessage(), [
+                'file' => \App\Utils\PathHelper::relative($e->getFile()),
+                'line' => $e->getLine(),
+                'type' => \get_class($e),
+            ]);
+        } catch (\Throwable $t) {
+            error_log($message . ' fallback: ' . $t->getMessage());
+        }
     }
 
     protected function createJsonResponse(array $data, int $statusCode): ResponseInterface
     {
         $response = new \Framework\Http\Response($statusCode);
         $json = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | ($this->debug ? JSON_PRETTY_PRINT : 0) | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
-        
+
         $response->getBody()->write($json);
         return $response->withHeader('Content-Type', 'application/json; charset=utf-8');
     }

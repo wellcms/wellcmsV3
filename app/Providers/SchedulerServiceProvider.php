@@ -16,9 +16,9 @@ class SchedulerServiceProvider implements \Framework\Providers\ServiceProviderIn
     {
         // hook app_Providers_SchedulerServiceProvider_start.php
 
-        // 注册 RedisCache
-        // 为非单例，避免常驻进程中 CacheManager 单例导致前缀固定
-        // cachepre 由 config/Cache.php 控制，支持通过环境变量 WELLCMS_SITE_ID 区分多站点
+        // 注册 RedisCache（非单例，确保每次使用正确的 cachepre）
+        // web 端从请求域名动态追加前缀实现多站点自动隔离
+        // CLI scheduler 无请求，走 cachepre 原值或 env 前缀
         $container->bind(RedisCache::class, function (Container $container) {
             $cfg = $container->get('cacheConfig');
             $redisCfg = $cfg['stores']['redis'] ?? [];
@@ -26,8 +26,13 @@ class SchedulerServiceProvider implements \Framework\Providers\ServiceProviderIn
                 throw new \RuntimeException("Scheduler requires 'redis' driver to be enabled in config/cache.php");
             }
 
-            // 直接 new RedisCache，使用当前配置中的 cachepre
-            // 多站点隔离由 config/Cache.php 通过环境变量 WELLCMS_SITE_ID 实现
+            $request = \Framework\Http\Psr7\RequestStack::getCurrent();
+            $host = $request ? $request->getUri()->getHost() : '';
+            if ($host !== '') {
+                $redisCfg['cachepre'] = ($redisCfg['cachepre'] ?? '')
+                    . str_replace('.', '_', $host) . '_';
+            }
+
             return new RedisCache($redisCfg);
         }, false, true);
 

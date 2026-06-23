@@ -11,7 +11,7 @@ use Framework\Core\Container;
 
 class Bootstrap
 {
-    public static function init(\Framework\Core\Container $container = null): Container
+    public static function init(?\Framework\Core\Container $container = null): Container
     {
         \Framework\Database\Collector\QueryCollector::startTime();
 
@@ -84,11 +84,22 @@ class Bootstrap
          * 1. 对于 type-hint 能够识别的对象，不再手动 get() 注入，由 MiddlewareFactory 自动解析。
          * 2. 只保留无法自动识别的标量配置项或特殊 Key。
          */
+        $appConfig = $container->get('appConfig');
+        $requestIdConfig = isset($appConfig['request_id']) ? $appConfig['request_id'] : [];
+
         $middlewareQueue = [
             // hook app_Bootstrap_middleware_start.php
+            'RequestId' => [
+                \App\Middleware\RequestIdMiddleware::class,
+                ['headerName' => isset($requestIdConfig['header_name']) ? $requestIdConfig['header_name'] : 'X-Request-Id']
+            ],
+            'LoggingContext' => [\App\Middleware\LoggingContextMiddleware::class, []],
             'ErrorHandler' => [
                 \App\Middleware\ErrorHandlerMiddleware::class,
-                ['debug' => (bool)\DEBUG]
+                [
+                    'debug'       => (bool)\DEBUG,
+                    'errorConfig' => isset($appConfig['error_handling']) ? $appConfig['error_handling'] : [],
+                ]
             ],
             // hook app_Bootstrap_middleware_before.php
             'RequestProcessor' => [

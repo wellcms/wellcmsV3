@@ -115,13 +115,14 @@ class PartitionController extends BaseController
             ));
         }
 
-        // 执行前确保存量表已注册
-        $statusList = $pm->getStatus();
-        if (empty($statusList)) {
-            $pm->adoptExistingTables();
-        }
-
         try {
+
+            // 执行前确保存量表已注册
+            $statusList = $pm->getStatus();
+            if (empty($statusList)) {
+                $pm->adoptExistingTables();
+            }
+
             $result = $pm->maintain($dryRun);
 
             // 非预览模式下成功后，启动每日调度任务（如存在 Scheduler）

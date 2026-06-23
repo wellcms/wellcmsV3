@@ -49,7 +49,26 @@ class ApplicationServiceProvider implements \Framework\Providers\ServiceProvider
             );
         }, true, false);
 
-        $container->bind(\App\Controllers\Base\ResponseFormatter::class, \App\Controllers\Base\ResponseFormatter::class, true, false);
+        $appConfig = $container->get('appConfig');
+        $policy = isset($appConfig['template_error_policy']) ? $appConfig['template_error_policy'] : [];
+
+        $container->bind(\App\Controllers\Base\ResponseFormatter::class, function ($c) use ($policy) {
+            return new \App\Controllers\Base\ResponseFormatter(
+                $c->get(\Framework\Http\Interfaces\ResponseFactoryInterface::class),
+                $c,
+                $policy
+            );
+        }, true, false);
+
+        // 新增：ErrorResponseBuilder
+        $errorConfig = isset($appConfig['error_handling']) ? $appConfig['error_handling'] : [];
+        $container->bind(\App\Services\ErrorResponseBuilder::class, function ($c) use ($errorConfig) {
+            return new \App\Services\ErrorResponseBuilder(
+                $c,
+                (bool)(\defined('DEBUG') ? DEBUG : 0),
+                $errorConfig
+            );
+        }, true, false);
 
         // 3. Session 管理系统 (单例注入并提前锁定配置)
         $container->bind(\App\Session\Handler\DatabaseSessionHandler::class, \App\Session\Handler\DatabaseSessionHandler::class, true, false);
@@ -162,6 +181,24 @@ class ApplicationServiceProvider implements \Framework\Providers\ServiceProvider
                 $prefix
             );
         }, true, false);
+
+        // Scheduler RedisCache：web 端从请求域名动态追加 key 前缀，多站点自动隔离
+        // Swoole HTTP / FPM 均可通过 RequestStack::getCurrent() 获取当前域名
+        // CLI scheduler 无请求，走 cachepre 原值或 env 前缀
+        $container->bind(\Framework\Cache\Drivers\RedisCache::class, function ($c) {
+            $cfg = $c->get('cacheConfig');
+            $redisCfg = $cfg['stores']['redis'] ?? [];
+            if (empty($redisCfg)) {
+                throw new \RuntimeException("Scheduler requires 'redis' driver in config/cache.php");
+            }
+            $request = \Framework\Http\Psr7\RequestStack::getCurrent();
+            $host = $request ? $request->getUri()->getHost() : '';
+            if ($host !== '') {
+                $redisCfg['cachepre'] = ($redisCfg['cachepre'] ?? '')
+                    . str_replace('.', '_', $host) . '_';
+            }
+            return new \Framework\Cache\Drivers\RedisCache($redisCfg);
+        }, false, true);
 
         // hook app_Providers_ApplicationServiceProvider_register_end.php
     }

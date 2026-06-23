@@ -158,7 +158,7 @@ class IndexController extends BaseController
                 'software_official_version' => isset($settingConfig['official_version']) ? $settingConfig['official_version'] : $this->language->get('none'),
                 'official_info' => isset($settingConfig['official_info']) ? $settingConfig['official_info'] : '',
             ],
-            'upgrade' => $settingConfig['upgrade'],
+            'upgrade' => $settingConfig['upgrade'] ?? 0,
             'upgrade_url' => $this->urlGenerator->url('admin/check/upgrade'),
             'runtime_data' => [
                 'users'        => $stats->getTotal('users'),
@@ -237,14 +237,14 @@ class IndexController extends BaseController
 
         return $this->renderCheckPage($routeMeta['layout'], [
             'upgrade_url' => $this->urlGenerator->url('admin/process/upgrade', $csrfToken ? ['_csrf_token' => $csrfToken] : []),
-            'upgrade_id' => $settingConfig['upgrade_id'],
-            'software_version' => $settingConfig['version'],
-            'official_version' => $settingConfig['official_version'],
+            'upgrade_id' => $settingConfig['upgrade_id'] ?? '',
+            'software_version' => $settingConfig['version'] ?? '',
+            'official_version' => $settingConfig['official_version'] ?? '',
             'official_message' => $message,
-            'upgrade' => $settingConfig['upgrade'],
+            'upgrade' => $settingConfig['upgrade'] ?? 0,
             // upgrade_available 与 process_upgrade 为模板遗留兼容字段，均指向 upgrade
-            'upgrade_available' => $settingConfig['upgrade'],
-            'process_upgrade' => $settingConfig['upgrade'],
+            'upgrade_available' => $settingConfig['upgrade'] ?? 0,
+            'process_upgrade' => $settingConfig['upgrade'] ?? 0,
             '_csrf_token' => $csrfToken,
         ]);
     }
@@ -271,8 +271,8 @@ class IndexController extends BaseController
         $settingConfig = $kv->settingGet('config');
 
         // 【安全性锁死】禁止从 Request 获取 URL/Hash，防止恶意劫持，仅信任数据库固化的数据
-        $upgradeUrl = $settingConfig['upgrade_url'];
-        $hash = $settingConfig['upgrade_hash'];
+        $upgradeUrl = $settingConfig['upgrade_url'] ?? '';
+        $hash = $settingConfig['upgrade_hash'] ?? '';
 
         if (empty($upgradeUrl)) {
             throw new \App\Exception\UpgradeException(
@@ -327,7 +327,7 @@ class IndexController extends BaseController
 
         $data = array_merge($baseData, [
             'title' => $this->language->get('upgrade_successfully'),
-            'software_version' => $settingConfig['version'],
+            'software_version' => $settingConfig['version'] ?? '',
             'admin_panel_url'  => $this->urlGenerator->url('admin/panel'),
             'language' => [
                 'upgrade_success_title' => $this->language->get('upgrade_success_title'),
@@ -421,7 +421,7 @@ class IndexController extends BaseController
         return [
             'menu' => $this->getAdminMenu(),
             'keywords' => $this->language->get('upgrading'),
-            'description' => $config['name'] . $this->language->get('upgrading')
+            'description' => ($config['name'] ?? 'WellCMS') . $this->language->get('upgrading')
         ];
     }
 

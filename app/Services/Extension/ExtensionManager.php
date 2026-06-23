@@ -159,6 +159,11 @@ class ExtensionManager
                 $links['disable'] = (1 === (int)$data['enable']) ? ['label' => $this->language->get('disable'), 'url' => $this->urlGenerator->url('admin/plugin/disable', $extra)] : '';
             }
 
+            // 主题切换：已安装但非当前主题时，显示启用入口
+            if ('theme' === $type && 1 === (int)$data['installed'] && 0 === (int)$data['enable']) {
+                $links['enable'] = ['label' => $this->language->get('enable'), 'url' => $this->urlGenerator->url('admin/theme/enable', $extra)];
+            }
+
             $links['upgrade'] = (1 === (int)$data['installed'] && ($data['has_upgrade'] ?? false)) ? ['label' => $this->language->get('upgrade'), 'url' => $this->urlGenerator->url('admin/store/upgrade', $extra)] : '';
         } else {
             // 本地未下载：显示商店详情 + 下载/购买

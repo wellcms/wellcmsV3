@@ -203,6 +203,7 @@ class OracleGrammar implements GrammarInterface
             '/\bBIGINT\s*(\(\d+\))?\s+NOT\s+NULL\s+AUTO_INCREMENT\b/i' => ' NUMBER(20) GENERATED AS IDENTITY PRIMARY KEY ',
             '/\bINT\s*(\(\d+\))?\s+NOT\s+NULL\s+AUTO_INCREMENT\b/i'    => ' NUMBER(19) GENERATED AS IDENTITY PRIMARY KEY ',
             '/\bINTEGER\s*(\(\d+\))?\s+NOT\s+NULL\s+AUTO_INCREMENT\b/i' => ' NUMBER(19) GENERATED AS IDENTITY PRIMARY KEY ',
+            '/\bSMALLINT\s*(\(\d+\))?\s+NOT\s+NULL\s+AUTO_INCREMENT\b/i'  => ' NUMBER(6) GENERATED AS IDENTITY PRIMARY KEY ',
 
             // MySQL 特有属性清理
             '/\bUNSIGNED\b/i'            => ' ',

@@ -173,6 +173,9 @@ function execute_install($data): array{
             ]);
             $pdo->exec("CREATE DATABASE IF NOT EXISTS `{$db['name']}` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
             $pdo->exec("USE `{$db['name']}`");
+
+            // 允许在 AUTO_INCREMENT 列中插入字面量 0（well_group Guest 组）
+            $pdo->exec("SET SESSION sql_mode = CONCAT(@@sql_mode, ',NO_AUTO_VALUE_ON_ZERO')");
         }
 
         // 2. 导入 SQL

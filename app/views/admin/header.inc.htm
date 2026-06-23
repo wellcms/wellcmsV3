@@ -93,7 +93,7 @@
 							data-menu-toggle="<?php echo $key;?>">
 							<div class="flex items-center">
 								<?php if (isset($item['icon'])){echo $item['icon'];} ?>
-								<?php echo $item['name'];?>
+								<?php echo $item['name'] ?? '';?>
 							</div>
 							<svg class="w-4 h-4 transition-transform duration-200 menu-arrow<?php if (isset($item['parent']) && $item['parent'] === $view->get('menu_fixed.parent')){echo ' rotate-180';} ?>"
 								fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -104,20 +104,20 @@
 						<div class="<?php if (isset($item['parent']) && $item['parent'] === $view->get('menu_fixed.parent')){echo 'block';} else {echo 'hidden';} ?> overflow-hidden transition-all duration-300 space-y-1 mt-1 px-4 lg:px-2"
 							data-menu-content="<?php echo $key;?>">
 							<?php foreach($item['children'] as $childKey => $childValue) { ?>
-							<a href="<?php echo $childValue['url'];?>"
-								class="flex items-center px-4 py-2 text-md font-medium rounded-lg text-gray-500 hover:text-blue-600 hover:bg-blue-50/50 dark:text-gray-400 dark:hover:text-blue-400 dark:hover:bg-blue-900/20 transition-colors<?php if ($childValue['child'] === $view->get('menu_fixed.child')){echo ' text-blue-600 dark:text-blue-300 font-bold';} ?>">
+							<a href="<?php echo $childValue['url'] ?? '#';?>"
+								class="flex items-center px-4 py-2 text-md font-medium rounded-lg text-gray-500 hover:text-blue-600 hover:bg-blue-50/50 dark:text-gray-400 dark:hover:text-blue-400 dark:hover:bg-blue-900/20 transition-colors<?php if (isset($childValue['child']) && $childValue['child'] === $view->get('menu_fixed.child')){echo ' text-blue-600 dark:text-blue-300 font-bold';} ?>">
 								<span
-									class="w-1.5 h-1.5 rounded-full <?php echo ($childValue['child'] === $view->get('menu_fixed.child')) ? 'bg-blue-500' : 'bg-gray-300'; ?> mr-3"></span>
-								<?php echo $childValue['name'];?>
+									class="w-1.5 h-1.5 rounded-full <?php echo (isset($childValue['child']) && $childValue['child'] === $view->get('menu_fixed.child')) ? 'bg-blue-500' : 'bg-gray-300'; ?> mr-3"></span>
+								<?php echo $childValue['name'] ?? '';?>
 							</a>
 							<?php } ?>
 						</div>
 					</div>
 					<?php } else { ?>
-					<a href="<?php echo $item['url'];?>"
-						class="flex items-center px-4 py-3 text-md font-medium rounded-xl <?php if ($item['parent'] === $view->get('menu_fixed.parent')){echo 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300';} else {echo 'text-gray-600 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-white';} ?> transition-colors">
+					<a href="<?php echo $item['url'] ?? '#';?>"
+						class="flex items-center px-4 py-3 text-md font-medium rounded-xl <?php if (isset($item['parent']) && $item['parent'] === $view->get('menu_fixed.parent')){echo 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300';} else {echo 'text-gray-600 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-white';} ?> transition-colors">
 						<?php if (isset($item['icon'])){echo $item['icon'];} ?>
-						<?php echo $item['name'];?>
+						<?php echo $item['name'] ?? '';?>
 					</a>
 					<?php } ?>
 					<?php } ?>

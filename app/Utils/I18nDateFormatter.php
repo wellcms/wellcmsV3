@@ -85,7 +85,8 @@ class I18nDateFormatter
             $dt = (new \DateTimeImmutable('@' . $datetime->getTimestamp()))
                 ->setTimezone($datetime->getTimezone() ?: new \DateTimeZone($this->getTimezone()));
         } elseif (is_numeric($datetime)) {
-            $dt = (new \DateTimeImmutable('@' . $datetime))->setTimezone(new \DateTimeZone($this->getTimezone()));
+            // 强制转 int 防止 '1718082680extra' 等畸形字符串进入 DateTimeImmutable 触发日期解析通知
+            $dt = (new \DateTimeImmutable('@' . (int)$datetime))->setTimezone(new \DateTimeZone($this->getTimezone()));
         } else {
             $dt = new \DateTimeImmutable((string)$datetime, new \DateTimeZone($this->getTimezone()));
         }

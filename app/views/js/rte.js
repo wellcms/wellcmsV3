@@ -897,6 +897,11 @@ class WellRTE {
     // We only keep Letters, Numbers, and Marks
     const query = queryRaw.replace(/[^\p{L}\p{N}\p{M}]/gu, "");
 
+    // ★ 纯 hex 颜色代码不触发话题建议
+    if (/^[0-9a-fA-F]{6}(?:[0-9a-fA-F]{2})?$/.test(query)) {
+      return null;
+    }
+
     return {
       trigger:
         foundTriggerChar === "＠"
@@ -2127,6 +2132,11 @@ class WellRTE {
         const cleanSub = sub.trim(); // "#topic"
         // Regex: # followed by letters/numbers/underscore, min 1 char
         if (cleanSub.length > 1 && /^#[\p{L}\p{N}_]+$/u.test(cleanSub)) {
+          // ★ 拒绝 CSS 颜色代码：6 位或 8 位纯十六进制不创建话题
+          const topicName = cleanSub.slice(1);
+          if (/^[0-9a-fA-F]{6}(?:[0-9a-fA-F]{2})?$/.test(topicName)) {
+            return;
+          }
           this.applyInlineFormat("hashtag", cleanSub, sub.length);
           return;
         }

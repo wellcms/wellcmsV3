@@ -298,6 +298,8 @@ class PgSqlGrammar implements GrammarInterface
                 '/\bINT\s*(\(\d+\))?\s+UNSIGNED\s+NOT\s+NULL\s+AUTO_INCREMENT\b/i'    => ' SERIAL ',
                 '/\bINT\s+NOT\s+NULL\s+AUTO_INCREMENT\b/i'                        => ' SERIAL ',
                 '/\bINTEGER\s*(\(\d+\))?\s+UNSIGNED\s+NOT\s+NULL\s+AUTO_INCREMENT\b/i' => ' SERIAL ',
+                '/\bSMALLINT\s*(\(\d+\))?\s+UNSIGNED\s+NOT\s+NULL\s+AUTO_INCREMENT\b/i'  => ' SMALLSERIAL ',
+                '/\bSMALLINT\s+NOT\s+NULL\s+AUTO_INCREMENT\b/i'                       => ' SMALLSERIAL ',
 
                 // MySQL 特有属性清理
                 '/\bUNSIGNED\b/i'            => ' ',

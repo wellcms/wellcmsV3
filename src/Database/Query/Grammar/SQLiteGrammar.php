@@ -152,6 +152,7 @@ class SQLiteGrammar implements GrammarInterface
             '/\bBIGINT\s*(\(\d+\))?\s+NOT\s+NULL\s+AUTO_INCREMENT\b/i' => ' INTEGER PRIMARY KEY AUTOINCREMENT ',
             '/\bINT\s*(\(\d+\))?\s+NOT\s+NULL\s+AUTO_INCREMENT\b/i'    => ' INTEGER PRIMARY KEY AUTOINCREMENT ',
             '/\bINTEGER\s*(\(\d+\))?\s+NOT\s+NULL\s+AUTO_INCREMENT\b/i' => ' INTEGER PRIMARY KEY AUTOINCREMENT ',
+            '/\bSMALLINT\s*(\(\d+\))?\s+NOT\s+NULL\s+AUTO_INCREMENT\b/i'  => ' INTEGER PRIMARY KEY AUTOINCREMENT ',
 
             // MySQL 特有属性清理
             '/\bUNSIGNED\b/i'            => ' ',

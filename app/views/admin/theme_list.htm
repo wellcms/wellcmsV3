@@ -121,6 +121,13 @@
 					</a>
 					<?php } ?>
 
+					<?php if (!empty($item['operation_links']['enable']['url'])) { ?>
+					<a href="<?php echo $item['operation_links']['enable']['url'];?>"
+						class="ajax-get px-3 py-1.5 text-xs font-bold text-white bg-blue-600 rounded-lg hover:bg-blue-700 shadow-lg shadow-blue-500/30 transition-all transform active:scale-95">
+						<?php echo $item['operation_links']['enable']['label']; ?>
+					</a>
+					<?php } ?>
+
 					<?php if (!empty($item['operation_links']['install']['url'])) { ?>
 					<a href="<?php echo $item['operation_links']['install']['url'];?>"
 						class="ajax-get px-3 py-1.5 text-xs font-bold text-white bg-blue-600 rounded-lg hover:bg-blue-700 shadow-lg shadow-blue-500/30 transition-all transform active:scale-95">

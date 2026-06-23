@@ -35,6 +35,11 @@ if (DEBUG >= 2) {
     ini_set('display_errors', '0');
 }
 
+// 错误日志是否同时记录原始绝对路径（用于审计）。
+// false：日志与调试输出中文件路径相对 APP_PATH，便于本地排查；
+// true ：额外保留 absolute_file 字段，记录服务器绝对路径。
+define('LOG_ABSOLUTE_PATH', false);
+
 // 核心加载：Compile -> Autoload
 require APP_PATH . 'app/Core/Compile.php';
 // 注册自动加载
@@ -67,7 +72,13 @@ try {
 } catch (\Throwable $e) {
     // 统一异常处理 (Standardization)
     // 此时 container 可能未初始化成功，需做容错
-    $handler = new \App\Core\ExceptionHandler(isset($container) ? $container : null);
+    $handler = new \App\Core\ExceptionHandler(
+        isset($container) ? $container : null,
+        (bool)\DEBUG,
+        (isset($container) && $container->has('appConfig'))
+            ? ($container->get('appConfig')['error_handling'] ?? [])
+            : []
+    );
     $response = $handler->handle($e, isset($request) ? $request : null);
 
     // 由调用方根据环境决定如何发射（FPM 下使用原生 PHP 函数，Swoole 下在 SwooleServer 中独立处理）

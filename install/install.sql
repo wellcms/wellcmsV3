@@ -99,9 +99,11 @@ CREATE TABLE `well_group` (
   `direct_post` tinyint(1) UNSIGNED NOT NULL DEFAULT '0',  -- 0需要审核，1直接发布内容
   `direct_reply` tinyint(1) UNSIGNED NOT NULL DEFAULT '0', -- 0需要审核，1直接发布回复
   `smtp` tinyint(1) UNSIGNED NOT NULL DEFAULT '0',  -- 1设置STMP
-  `task` tinyint(1) UNSIGNED NOT NULL DEFAULT '0',  -- 定时任务 1有权限
-  PRIMARY KEY (id)
+  `task` tinyint(1) UNSIGNED NOT NULL DEFAULT '0'  -- 定时任务 1有权限
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+ALTER TABLE `well_group` ADD PRIMARY KEY (`id`);
+ALTER TABLE `well_group` MODIFY `id` smallint(6) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=110;
 
 INSERT INTO `well_group` (`id`, `name`, `credits_from`, `credits_to`, `administer`, `setting`, `group`, `create_group`, `update_group`, `delete_group`, `store`, `plugin`, `theme`, `other`, `upload`, `down`, `upload_daily_quota`, `upload_per_post`, `allowed_file_types`, `quota_daily_size`, `quota_single_size`, `user`, `create_user`, `update_user`, `delete_user`, `view_user`, `access_user`, `view_ip`, `pinned`, `feature`, `update`, `remove`, `move`, `delete`, `ban`, `reward`, `punishment`, `review`, `view`, `post`, `reply`, `user_update`, `user_delete`, `username_update`, `email_update`, `direct_post`, `direct_reply`, `smtp`, `task`) VALUES
 (0, 'Guest', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
@@ -120,16 +122,6 @@ INSERT INTO `well_group` (`id`, `name`, `credits_from`, `credits_to`, `administe
 (107, 'Lv7', 1000000, 10000000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 50, 10, 0, 5368709120, 524288000, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0),
 (108, 'Lv8', 10000000, 100000000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 100, 10, 0, 10737418240, 1073741824, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0),
 (109, 'Lv9', 100000000, 1000000000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 100, 10, 0, 10737418240, 1073741824, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0);
-
---
--- 表的索引 `well_group`
---
--- ALTER TABLE `well_group` ADD PRIMARY KEY (`id`);
---
--- 使用表AUTO_INCREMENT `well_group`
---
-ALTER TABLE `well_group` MODIFY `id` smallint(6) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=110;
-COMMIT;
 
 -- 第一次进入站点就写入session表，设置状态字段，status=1 第一次访问，第二次刷新时清理cookie_test，如果判断写入了cookie并且没有错误，修改status=0可正常访问站点，如果错误，则直接锁死IP
 -- session 表

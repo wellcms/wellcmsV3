@@ -50,6 +50,7 @@
 
 			<!--{hook admin_setting_base_form_domain_after.htm}-->
 
+			<?php if ($modules = $view->get('external_link.modules', [])){ ?>
 				<!-- External Link Whitelist -->
 				<div class="space-y-2">
 					<label class="block text-sm font-bold text-gray-700 dark:text-gray-300 uppercase tracking-widest text-[10px]">
@@ -79,40 +80,24 @@
 							<?php echo $view->get('language.external_link_redirect');?>
 						</label>
 					</div>
-
+					<?php $selected = $view->get('external_link.selected', []); ?>
 					<div class="space-y-2">
 						<label class="block text-sm text-gray-700 dark:text-gray-300">
 							<?php echo $view->get('language.external_link_modules');?>
 						</label>
-						<?php $modules = $view->get('external_link_modules', ['forum']);?>
 						<div class="flex flex-wrap gap-4">
+							<?php foreach($modules as $module => $label) { ?>
 							<label class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-								<input type="checkbox" name="external_link_modules[]" value="forum"
+								<input type="checkbox" name="external_link_modules[]" value="<?php echo $module;?>"
 									class="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
-									<?php echo in_array('forum', $modules) ? 'checked' : '';?>>
-								Forum
+									<?php echo in_array($module, $selected) ? 'checked' : '';?>>
+								<?php echo $label;?>
 							</label>
-							<label class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-								<input type="checkbox" name="external_link_modules[]" value="page"
-									class="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
-									<?php echo in_array('page', $modules) ? 'checked' : '';?>>
-								Page
-							</label>
-							<label class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-								<input type="checkbox" name="external_link_modules[]" value="article"
-									class="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
-									<?php echo in_array('article', $modules) ? 'checked' : '';?>>
-								Article
-							</label>
-							<label class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-								<input type="checkbox" name="external_link_modules[]" value="store"
-									class="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
-									<?php echo in_array('store', $modules) ? 'checked' : '';?>>
-								Store
-							</label>
+							<?php } ?>
 						</div>
 					</div>
 				</div>
+			<?php } ?>
 
 			<!-- Site Brief -->
 			<?php if ($view->get('site_brief')) { ?>

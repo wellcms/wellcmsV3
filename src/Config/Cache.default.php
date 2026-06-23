@@ -1,6 +1,15 @@
 <?php
 // 缓存驱动配置
+// [多站点隔离] 同一套代码部署多个站点时，设置环境变量 WELLCMS_SITE_ID 区分前缀
+// Nginx 示例: fastcgi_param WELLCMS_SITE_ID siteA;
+// Swoole 示例(Supervisor): environment=WELLCMS_SITE_ID=siteA
+// 单站点无需设置
+$siteId     = getenv('WELLCMS_SITE_ID');
+$sitePrefix = $siteId !== false ? $siteId . '_' : '';
+
 return [
+    'site_id' => $siteId !== false ? $siteId : '',
+
     // 默认使用 MySQL 降级缓存
     //'default' => 'mysql',
 

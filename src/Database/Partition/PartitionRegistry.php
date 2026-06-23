@@ -160,6 +160,8 @@ class PartitionRegistry
                 continue;
             }
 
+            // 最佳推测：绝大多数 RANGE 分区表以 created_at 为分区列
+            // 少数表使用 reply_created_at / thread_created_at，无法从 information_schema 可靠推断
             $partitionColumn = 'created_at';
 
             // 检测子分区（MySQL 5.7 兼容）
@@ -171,7 +173,9 @@ class PartitionRegistry
                 if ($totalPar > 0 && $totalSub > 0) {
                     // subpartition_count = total_sub / total_par（每个父分区下的子分区数）
                     $subPartitions = (int)($totalSub / $totalPar);
-                    $subPartitionColumn = 'thread_id';
+                    // 子分区列名无法从 information_schema 推断（可能是 thread_id / user_id），
+                    // 标记为 null 避免误导；DDL 构建不使用此字段，仅用于 getStatus() 展示
+                    $subPartitionColumn = null;
                 }
             }
 

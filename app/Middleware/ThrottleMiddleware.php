@@ -50,6 +50,8 @@ class ThrottleMiddleware implements \Framework\Http\Interfaces\MiddlewareInterfa
     private $staticPathWhitelist = [];
     /** @var array */
     private $staticContentTypeWhitelist = [];
+    /** @var bool */
+    private $debug = false;
 
     public function __construct(
         array $appConfig,
@@ -73,6 +75,7 @@ class ThrottleMiddleware implements \Framework\Http\Interfaces\MiddlewareInterfa
         $this->cache = $cache;
         $this->logger = $logger;
         $this->sessionManager = $sessionManager;
+        $this->debug = \defined('DEBUG') ? (bool)\DEBUG : false;
     }
 
     public function process(\Framework\Http\Interfaces\ServerRequestInterface $request, \Framework\Http\Interfaces\RequestHandlerInterface $handler): ResponseInterface
@@ -265,15 +268,17 @@ class ThrottleMiddleware implements \Framework\Http\Interfaces\MiddlewareInterfa
 
             return $handler->handle($request);
         } catch (\Throwable $e) {
-            // 404 异常不作为系统级 Error 记录，减少噪音
             if (!($e instanceof \Framework\Exception\Http\NotFoundException)) {
                 $this->logger->error("Error in " . get_class($this) . ": " . $e->getMessage(), ['exception' => $e]);
             }
 
-            // 如果是 DEBUG 模式，抛出异常，方便前端看到
-            if (defined('DEBUG') && DEBUG >= 2) throw $e;
+            if (\defined('DEBUG') && DEBUG >= 2) {
+                throw $e;
+            }
 
             $message = $this->container->get(\App\Controllers\Base\MessageController::class);
+
+            // 保持现有错误码 8 不变
             return $message->errorMessage('Throttle verification error', 8);
         }
     }
@@ -362,12 +367,41 @@ class ThrottleMiddleware implements \Framework\Http\Interfaces\MiddlewareInterfa
     private function restrictAccess(?string $sessionId, string $ip, int $userId, int $now, int $reason = 0, bool $addBlacklist = false): ResponseInterface
     {
         try {
-            if ($addBlacklist) $this->addToBlacklist($userId, $reason, $ip);
+            if ($addBlacklist) {
+                $this->addToBlacklist($userId, $reason, $ip);
+            }
         } catch (\Throwable $e) {
             $this->logger->error("AddToBlacklist failed: " . $e->getMessage());
         }
+
         $message = $this->container->get(\App\Controllers\Base\MessageController::class);
-        return $message->errorMessage('Access Denied【' . $reason . '】', 15);
+
+        $extraData = [];
+        if ($this->debug && !empty($this->appConfig['throttle_diag']['enabled_in_debug'])) {
+            $extraData['data']['diagnostic'] = [
+                'reason' => $reason,
+                'stage'  => $this->resolveThrottleStage($reason),
+            ];
+        }
+
+        // 保持现有错误码 15 不变
+        return $message->errorMessage('Access Denied【' . $reason . '】', 15, '', 3, $extraData);
+    }
+
+    private function resolveThrottleStage(int $reason): string
+    {
+        $map = [
+            1 => 'empty_user_agent',
+            2 => 'api_auth_failed',
+            3 => 'session_rate_limit',
+            5 => 'behavior_rate_limit',
+            6 => 'token_fail_limit',
+            7 => 'cache_rate_limit',
+            8 => 'verification_failed',
+            9 => 'behavior_penalty',
+        ];
+
+        return isset($map[$reason]) ? $map[$reason] : 'unknown';
     }
 
     /** 黑名单检查 */

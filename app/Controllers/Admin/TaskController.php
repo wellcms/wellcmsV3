@@ -21,29 +21,55 @@ class TaskController extends BaseController
     /** @var TaskManage */
     private $taskManage;
 
-    /** @var string|null 缓存 WELLCMS_SITE_ID 检查结果 */
+    /** @var bool|null 缓存站点隔离标识检查结果 */
     private $siteIsolationChecked;
 
     protected function taskManage()
     {
         if ($this->taskManage) return $this->taskManage;
 
-        // 多个站点共用同一 Redis 时，必须通过环境变量区分 key 前缀
-        if ($this->siteIsolationChecked === null) {
-            $siteId = getenv('WELLCMS_SITE_ID');
-            $this->siteIsolationChecked = ($siteId !== false && $siteId !== '');
-        }
-        if (!$this->siteIsolationChecked) {
+        // 1. 核心依赖检查：Redis 必须配置（硬阻断）
+        $cfg = $this->container->get('cacheConfig');
+        if (!isset($cfg['stores']['redis'])) {
             return null;
         }
 
-        $cfg = $this->container->get('cacheConfig');
-        if (isset($cfg['stores']['redis'])) {
+        // 2. 尝试初始化 TaskManage（优雅降级，对齐 PartitionController 模式）
+        try {
             $this->taskManage = $this->container->get(TaskManage::class);
-            return $this->taskManage;
+        } catch (\Throwable $e) {
+            $this->logOnce('TaskManage init failed: ' . $e->getMessage());
+            return null;
         }
 
-        return null;
+        // 3. 站点隔离标识：从当前请求域名自动获取，无需配置环境变量
+        if ($this->siteIsolationChecked === null) {
+            $host = $this->request->getUri()->getHost();
+            $this->siteIsolationChecked = ($host !== '');
+        }
+
+        return $this->taskManage;
+    }
+
+    /**
+     * 防重复日志：同 worker 生命周期内同一消息仅记录一次
+     *
+     * FPM 下每子进程一次，Swoole 下每 worker 进程一次。
+     * 极端情况下 LoggerInterface 不可用时降级到 error_log()。
+     */
+    private function logOnce(string $message): void
+    {
+        static $logged = [];
+        $key = md5($message);
+        if (isset($logged[$key])) return;
+        $logged[$key] = true;
+        try {
+            $this->container->get(
+                \Framework\Logger\LoggerInterface::class
+            )->warning($message);
+        } catch (\Throwable $e) {
+            error_log('TaskController: ' . $message);
+        }
     }
 
     /**

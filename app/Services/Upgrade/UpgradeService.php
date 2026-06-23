@@ -33,7 +33,7 @@ class UpgradeService
     {
         $currentVersion = $this->appConfig['version'];
         $config = (array)($this->kv->settingGet('config') ?? []);
-        $apiUrl = $config['upgrade_url'] ?: 'https://www.wellcms.com/api/v1/version.html';
+        $apiUrl = !empty($config['upgrade_url']) ? $config['upgrade_url'] : 'https://www.wellcms.com/api/v1/version.html';
 
         $client = new \Framework\Utils\HttpClient();
         try {
@@ -227,7 +227,7 @@ class UpgradeService
         // 4. 版本同步与持久化
         // 从数据库实时读取官方版本号，避免依赖构造时传入的 $appConfig（可能未包含最新远程版本）
         $config = (array)($this->kv->settingGet('config') ?? []);
-        $newVersion = $config['official_version'] ?: $this->appConfig['version'];
+        $newVersion = !empty($config['official_version']) ? $config['official_version'] : $this->appConfig['version'];
         $versionDate = time();
 
         // A. 更新数据库 well_kv -> setting -> config

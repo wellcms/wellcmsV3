@@ -56,4 +56,45 @@ return [
     'external_link_redirect_enabled' => 1, // 0=关闭 1=开启（forum 模块默认启用，page/article/store 需在 external_link_modules 中手动添加）
     'external_link_modules' => ['forum'], // 启用外链处理的模块列表
     'external_link_whitelist' => '', // 外链白名单域名（逗号分隔）
+
+    /**
+     * 模板错误处理策略
+     */
+    'template_error_policy' => [
+        // 是否将模板执行异常写入应用日志（推荐生产开启）
+        'log_render_errors' => true,
+
+        // 模板渲染失败时的 HTTP 状态码；false 表示保持现有 200 行为
+        'error_status_code' => 500,
+
+        // 是否在生产环境显示简化错误信息（非调试模式仍不暴露堆栈）
+        'show_public_message' => true,
+    ],
+
+    /**
+     * 错误处理与调试策略
+     */
+    'error_handling' => [
+        // 生产环境默认提示语
+        'generic_message' => 'Internal Server Error',
+
+        // 业务错误渲染器：theme | fallback
+        'business_renderer' => 'theme',
+    ],
+
+    /**
+     * 请求追踪 ID 配置
+     */
+    'request_id' => [
+        'header_name' => 'X-Request-Id',
+        'enabled'     => true,
+    ],
+
+    /**
+     * 限流调试诊断
+     */
+    'throttle_diag' => [
+        // DEBUG > 0 时是否在业务错误响应中附加 {diagnostic:{reason,stage}}
+        'enabled_in_debug' => true,
+    ],
 ];

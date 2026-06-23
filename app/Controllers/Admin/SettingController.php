@@ -58,7 +58,12 @@ class SettingController extends BaseController
             'action' => $this->urlGenerator->url('admin/setting/postBase', $extra),
             'external_link_whitelist' => $this->appConfig['external_link_whitelist'] ?? '',
             'external_link_redirect_enabled' => $this->appConfig['external_link_redirect_enabled'] ?? 0,
-            'external_link_modules' => $this->appConfig['external_link_modules'] ?? ['forum'],
+            'external_link' => [
+                'modules' => [
+                    //'forum' => 'Forum',
+                ],
+                'selected' => $this->appConfig['external_link_modules'] ?? []
+            ],
             'language' => [
                 'website_name' => $this->language->get('website_name'),
                 'sitebrief_tip' => $this->language->get('sitebrief_tip'),

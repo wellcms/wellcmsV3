@@ -218,6 +218,7 @@ Router::group(['prefix' => '/admin'], function () {
             Router::get('/list', [ThemeController::class, 'list'], ['layout' => 'theme_list']);
             Router::get('/detail', [ThemeController::class, 'detail'], ['layout' => 'plugin_detail']);
             Router::get('/install', [ThemeController::class, 'install']);
+            Router::get('/enable', [ThemeController::class, 'enable']);
             Router::get('/uninstall', [ThemeController::class, 'uninstall']);
             Router::get('/setting', [ThemeController::class, 'setting'], ['layout' => 'setting']);
             Router::get('/postSetting', [ThemeController::class, 'postSetting'], ['requiresCsrf' => ['enable' => true, 'ttl' => 3600]]);

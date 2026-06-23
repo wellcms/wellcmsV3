@@ -243,50 +243,52 @@ class MarketClient
             return $this->doLoginRequest($url, $data);
         }
 
-        // 3. 获取或申请会话密钥
-        $session = $this->getOrRefreshSession($credentials);
-
-        // 4. 构建请求数据
-        $requestData = $this->buildRequestData($credentials, $data);
-
-        // 5. 使用 session_key 签名
-        $requestData['sign'] = SignatureHelper::signRequest($requestData, $session['key']);
-
-        // 6. V4.2: 生成 ECDSA 签名
-        $ecdsaSignature = $this->signRequest($requestData);
-
-        // 7. 发送请求
-        $headers = [
-            'User-Agent: ' . IpHelper::userAgent(),
-            'Content-Type: application/json',
-            'Accept: application/json',
-            'X-Session-Hash: ' . hash('sha256', $session['key']),
-            'X-Site-ID: ' . $credentials['site_id'],
-        ];
-
-        // V4.2: 附加 ECDSA 签名（业务接口强制要求）
-        if (!empty($ecdsaSignature)) {
-            $headers[] = 'X-Client-Signature: ' . $ecdsaSignature;
-        }
-
-        $config = [
-            'method' => 'POST',
-            'url' => $url,
-            'body' => SecurityHelper::jsonEncode($requestData),
-            'timeout' => 30,
-            'headers' => $headers,
-            'followRedirects' => true,
-            'verifySSL' => false,
-            'caBundle' => '/tmp/',
-            'returnResponse' => false,
-        ];
-
         try {
+
+            // 3. 获取或申请会话密钥
+            $session = $this->getOrRefreshSession($credentials);
+
+            // 4. 构建请求数据
+            $requestData = $this->buildRequestData($credentials, $data);
+
+            // 5. 使用 session_key 签名
+            $requestData['sign'] = SignatureHelper::signRequest($requestData, $session['key']);
+
+            // 6. V4.2: 生成 ECDSA 签名
+            $ecdsaSignature = $this->signRequest($requestData);
+
+            // 7. 发送请求
+            $headers = [
+                'User-Agent: ' . IpHelper::userAgent(),
+                'Content-Type: application/json',
+                'Accept: application/json',
+                'X-Session-Hash: ' . hash('sha256', $session['key']),
+                'X-Site-ID: ' . $credentials['site_id'],
+            ];
+
+            // V4.2: 附加 ECDSA 签名（业务接口强制要求）
+            if (!empty($ecdsaSignature)) {
+                $headers[] = 'X-Client-Signature: ' . $ecdsaSignature;
+            }
+
+            $config = [
+                'method' => 'POST',
+                'url' => $url,
+                'body' => SecurityHelper::jsonEncode($requestData),
+                'timeout' => 30,
+                'headers' => $headers,
+                'followRedirects' => true,
+                'verifySSL' => false,
+                'caBundle' => '/tmp/',
+                'returnResponse' => false,
+            ];
+
             if (!Runtime::isSwoole()) {
                 set_time_limit(0);
             }
             $client = new \Framework\Utils\HttpClient();
             return (string) $client->request($config);
+
         } catch (\Throwable $e) {
             $this->logger->error('HTTP request failed', [
                 'path' => $path,

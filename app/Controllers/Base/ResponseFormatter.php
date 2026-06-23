@@ -15,10 +15,17 @@ class ResponseFormatter
     protected $container;
     /** @var \Framework\Http\Interfaces\ResponseFactoryInterface */
     protected $response;
+    /** @var array */
+    protected $templateErrorPolicy;
 
-    public function __construct(\Framework\Http\Interfaces\ResponseFactoryInterface $responseFactory)
-    {
+    public function __construct(
+        \Framework\Http\Interfaces\ResponseFactoryInterface $responseFactory,
+        ?\Framework\Core\Container $container = null,
+        array $templateErrorPolicy = []
+    ) {
         $this->response = $responseFactory;
+        $this->container = $container;
+        $this->templateErrorPolicy = $templateErrorPolicy;
     }
 
     /**
@@ -56,8 +63,10 @@ class ResponseFormatter
      */
     public function htmlResponseFormat(array $data, string $templateFile): ResponseInterface
     {
-        // 使用闭包在独立作用域中渲染模板
-        $content = (function (array $vars, string $tpl) {
+        $policy = $this->templateErrorPolicy;
+        $renderError = null;
+
+        $content = (function (array $vars, string $tpl) use ($policy, &$renderError) {
             // 生成一个简单的“视图容器”支持
             $view = new class($vars) {
                 private $data = [];
@@ -158,15 +167,72 @@ class ResponseFormatter
                 include \App\Core\Compile::include($tpl);
                 return ob_get_clean();
             } catch (\Throwable $e) {
-                return "Template render error: " . $e->getMessage();
+                $renderError = $e;
+
+                if (!empty($policy['log_render_errors'])) {
+                    $this->logTemplateError($tpl, $e);
+                }
+
+                return $this->buildTemplateErrorMessage($e, $policy);
             }
         })($data, $templateFile);
 
-        // 组装并返回 PSR‑7 响应
-        $code = isset($data['code']) && $data['code'] > 200 ? (int)$data['code'] : 200;
+        // 确定状态码
+        $code = 200;
+        if ($renderError !== null && !empty($policy['error_status_code'])) {
+            $code = (int) $policy['error_status_code'];
+        } elseif (isset($data['code']) && $data['code'] > 200) {
+            $code = (int)$data['code'];
+        }
+
         $response = $this->response->createResponse($code)->withHeader('Content-Type', 'text/html; charset=utf-8');
-        $response->getBody()->write((string)$content);
+        $response->getBody()->write((string) $content);
         return $response;
+    }
+
+    protected function logTemplateError(string $tpl, \Throwable $e): void
+    {
+        try {
+            $context = [
+                'template' => \App\Utils\PathHelper::relative($tpl),
+                'file' => \App\Utils\PathHelper::relative($e->getFile()),
+                'line' => $e->getLine(),
+                'type' => get_class($e),
+            ];
+
+            // 生产环境 DEBUG=0 时 Compile::include 走 I/O 冻结，二次调用成本可控
+            $compiled = method_exists(\App\Core\Compile::class, 'include')
+                ? \App\Core\Compile::include($tpl)
+                : $tpl;
+            if ($compiled !== $tpl) {
+                $context['compiled'] = \App\Utils\PathHelper::relative($compiled);
+            }
+
+            if ($this->container && method_exists($this->container, 'has') && $this->container->has('logger')) {
+                $this->container->get('logger')->error('Template render error: ' . $e->getMessage(), $context);
+            } else {
+                error_log('Template render error: ' . $e->getMessage() . ' | ' . json_encode($context, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+            }
+        } catch (\Throwable $t) {
+            error_log('Failed to log template error: ' . $t->getMessage());
+        }
+    }
+
+    protected function buildTemplateErrorMessage(\Throwable $e, array $policy): string
+    {
+        if (defined('DEBUG') && DEBUG > 0) {
+            return '<h1>Template Render Error</h1>'
+                . '<p><strong>Message:</strong> ' . htmlspecialchars($e->getMessage(), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</p>'
+                . '<p><strong>File:</strong> ' . htmlspecialchars(\App\Utils\PathHelper::relative($e->getFile()), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')
+                . ' : ' . $e->getLine() . '</p>'
+                . '<pre>' . htmlspecialchars(\App\Utils\PathHelper::relativeTraceAsString($e), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</pre>';
+        }
+
+        if (!empty($policy['show_public_message'])) {
+            return '<h1>Internal Server Error</h1><p>The page could not be rendered. Please try again later.</p>';
+        }
+
+        return '';
     }
 
     /**

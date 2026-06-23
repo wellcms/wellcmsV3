@@ -261,6 +261,11 @@ class ThemeController extends BaseController
         return $this->handleAction($request, 'install');
     }
 
+    public function enable(\Framework\Http\Interfaces\ServerRequestInterface $request): ResponseInterface
+    {
+        return $this->handleAction($request, 'enable');
+    }
+
     public function uninstall(\Framework\Http\Interfaces\ServerRequestInterface $request): ResponseInterface
     {
         return $this->handleAction($request, 'uninstall');

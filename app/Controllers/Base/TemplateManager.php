@@ -66,6 +66,9 @@ class TemplateManager
 
         // 3. 执行物理探测逻辑
         $filePath = $this->resolvePhysicalPath($templateDir, $fileName, $id, $request);
+        if (empty($filePath)) {
+            throw new \RuntimeException('Template not found: ' . $fileName);
+        }
 
         // 4. 更新缓存
         if (!empty($filePath)) {
@@ -106,9 +109,16 @@ class TemplateManager
         }
 
         // 核心默认路径
-        return true === $templateDir
+        $defaultPath = true === $templateDir
             ? APP_PATH . 'app/views/admin/' . $fileName . '.htm'
             : APP_PATH . 'app/views/htm/' . $fileName . '.htm';
+
+        // 若默认路径也不存在，则返回空字符串，避免缓存不存在路径
+        if (!file_exists($defaultPath)) {
+            return '';
+        }
+
+        return $defaultPath;
     }
 
     protected function getDevicePrefix(?ServerRequestInterface $request = null): string

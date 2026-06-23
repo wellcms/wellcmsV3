@@ -256,6 +256,7 @@ class SqlServerGrammar implements GrammarInterface
             '/\bBIGINT\s*(\(\d+\))?\s+NOT\s+NULL\s+AUTO_INCREMENT\b/i' => ' BIGINT IDENTITY(1,1) PRIMARY KEY ',
             '/\bINT\s*(\(\d+\))?\s+NOT\s+NULL\s+AUTO_INCREMENT\b/i'    => ' BIGINT IDENTITY(1,1) PRIMARY KEY ',
             '/\bINTEGER\s*(\(\d+\))?\s+NOT\s+NULL\s+AUTO_INCREMENT\b/i' => ' BIGINT IDENTITY(1,1) PRIMARY KEY ',
+            '/\bSMALLINT\s*(\(\d+\))?\s+NOT\s+NULL\s+AUTO_INCREMENT\b/i'  => ' INT IDENTITY(1,1) PRIMARY KEY ',
 
             // MySQL 特有属性清理
             '/\bUNSIGNED\b/i'            => ' ',

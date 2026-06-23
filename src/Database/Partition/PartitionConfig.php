@@ -56,7 +56,7 @@ class PartitionConfig
         string $period = 'quarter',
         int $advanceCount = 4,
         int $retention = 8,
-        string $subPartitionColumn = null,
+        ?string $subPartitionColumn = null,
         int $subPartitions = 0
     ) {
         $this->table = $table;
