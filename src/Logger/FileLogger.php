@@ -30,7 +30,8 @@ class FileLogger implements \Framework\Logger\LoggerInterface
     public function __construct(array $loggerConfig = [])
     {
         $path = isset($loggerConfig['path']) ? $loggerConfig['path'] : sys_get_temp_dir();
-        $this->logFile = $path;
+        // 防御：确保日志路径是文件路径，尾部无分隔符（防止误传入目录路径）
+        $this->logFile = rtrim($path, DIRECTORY_SEPARATOR);
         $this->formatter = new \Framework\Logger\Formatter\JsonFormatter();
         // 注册脚本结束时写入日志
         register_shutdown_function([$this, 'flush']);
@@ -81,16 +82,27 @@ class FileLogger implements \Framework\Logger\LoggerInterface
     {
         if (empty($this->buffer)) return;
 
-        if (!is_dir(dirname($this->logFile))) {
-            mkdir(dirname($this->logFile), 0755, true);
+        $logDir = dirname($this->logFile);
+        if (!is_dir($logDir)) {
+            @mkdir($logDir, 0755, true);
         }
 
-        // 异步写入：无锁写入，省去阻塞
-        file_put_contents(
-            $this->logFile,
-            implode('', $this->buffer),
-            FILE_APPEND | LOCK_EX
-        );
+        try {
+            file_put_contents(
+                $this->logFile,
+                implode('', $this->buffer),
+                FILE_APPEND | LOCK_EX
+            );
+        } catch (\Throwable $e) {
+            error_log(sprintf(
+                'FileLogger flush to %s failed: %s',
+                $this->logFile,
+                $e->getMessage()
+            ));
+            foreach ($this->buffer as $line) {
+                error_log(trim($line));
+            }
+        }
         $this->buffer = [];
     }
 }

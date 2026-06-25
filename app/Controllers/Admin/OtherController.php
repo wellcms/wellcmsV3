@@ -88,7 +88,7 @@ class OtherController extends BaseController
         }
 
         if ($temporaryDirectory) {
-            DirectoryHelper::rmdirRecursive(APP_PATH . ltrim($this->appConfig['tmp_path'], './'));
+            DirectoryHelper::rmdirRecursive($this->appConfig['tmp_path']);
 
             DirectoryHelper::rmdirRecursive(APP_PATH . 'public/static/');
             // 同步清理 OPcache

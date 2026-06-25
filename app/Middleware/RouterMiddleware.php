@@ -26,7 +26,14 @@ class RouterMiddleware implements \Framework\Http\Interfaces\MiddlewareInterface
         $match = $this->compiledRouter->match($method, $path);
         if (!$match) {
             // 过滤浏览器/调试器常见的噪声请求，避免污染日志 (Noise filter)
-            if (substr($path, -12) === '/favicon.ico' || strpos($path, '/.well-known/') === 0) {
+            // 静态文件路径（/upload/、/static/、/storage/）应由 Web Server 处理，
+            // 落入 PHP 路由时直接 404 静默响应，不记日志
+            if (substr($path, -12) === '/favicon.ico'
+                || strpos($path, '/.well-known/') === 0
+                || strpos($path, '/upload/') === 0
+                || strpos($path, '/static/') === 0
+                || strpos($path, '/storage/') === 0
+            ) {
                 return new \Framework\Http\Response(404);
             }
             throw new \Framework\Exception\Http\NotFoundException("Route not found: $path");

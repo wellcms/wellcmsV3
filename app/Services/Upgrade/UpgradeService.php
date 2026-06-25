@@ -200,7 +200,7 @@ class UpgradeService
             @set_time_limit(0);
         }
 
-        $tmpDir = APP_PATH . ltrim($this->appConfig['tmp_path'], './');
+        $tmpDir = $this->appConfig['tmp_path'];
         $zipPath = $tmpDir . 'upgrade_' . date('Ymd_His') . '.zip';
 
         // 1. 下载阶段

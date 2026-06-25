@@ -59,6 +59,8 @@ class Compile
             'disabled_plugin' => 0,
         ];
 
+        // 注意：此路径独立于 ConfigServiceProvider 处理
+        // 原因：Compile::init() 在 ConfigServiceProvider::register() 之前执行（见 index.php:52-62）
         // 确保 tmp_path 为绝对目录
         $appPath = defined('APP_PATH') ? APP_PATH : dirname(__DIR__, 2) . '/';
         self::$config['tmp_path'] = $appPath . ltrim(self::$config['tmp_path'], './');

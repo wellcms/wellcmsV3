@@ -17,21 +17,25 @@ class GroupService
     protected $dbModel;
     /** @var \Framework\Cache\Interfaces\CacheInterface */
     protected $cache;
+    /** @var \Framework\Core\Container */
+    protected $container;
     /** @var array */
     protected $cacheConfig;
     /** @var int */
     protected $cacheTtl = 7200;
 
-    public function __construct(
-        \App\Models\GroupModel $dbModel,
-        \Framework\Cache\Interfaces\CacheInterface $cache,
-        array $cacheConfig
-    ) {
+    public function __construct(\Framework\Core\Container $container)
+    {
         // hook app_Services_GroupService_construct_start.php
-        $this->dbModel = $dbModel;
-        $this->cache = $cache;
-        $this->cacheConfig = $cacheConfig;
+
+        $this->container = $container;
+
+        $this->dbModel     = $container->get(\App\Models\GroupModel::class);
+        $this->cache       = $container->get(\Framework\Cache\Interfaces\CacheInterface::class);
+        $this->cacheConfig = $container->get('cacheConfig');
+
         $this->cacheTtl = $this->cacheConfig['cache_ttl'] ?? 7200;
+
         // hook app_Services_GroupService_construct_end.php
     }
 

@@ -86,13 +86,23 @@ function check_db_connection($cfg): array{
     $type = $cfg['type'] ?? 'mysql';
     try {
         if ($type === 'pgsql') {
-            $dsn = "pgsql:host={$cfg['host']};port={$cfg['port']};dbname=postgres";
+            $dsn = "pgsql:host={$cfg['host']};port={$cfg['port']};dbname={$cfg['name']}";
         } else {
             $dsn = "mysql:host={$cfg['host']};port={$cfg['port']};charset=utf8mb4";
         }
         $pdo = new PDO($dsn, $cfg['user'], $cfg['pass'], [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
         return ['status' => true, 'message' => 'Connection success'];
     } catch (PDOException $e) {
+        // pgsql 目标库不存在时回退到 postgres 系统库验证服务器连接
+        if ($type === 'pgsql') {
+            try {
+                $dsn = "pgsql:host={$cfg['host']};port={$cfg['port']};dbname=postgres";
+                $pdo = new PDO($dsn, $cfg['user'], $cfg['pass'], [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+                return ['status' => true, 'message' => '服务器连接成功，目标数据库不存在，安装时将自动创建'];
+            } catch (PDOException $e2) {
+                return ['status' => false, 'message' => $e2->getMessage()];
+            }
+        }
         return ['status' => false, 'message' => $e->getMessage()];
     }
 }
@@ -109,6 +119,26 @@ function installer_random_str(int $length = 16)
         $randomString .= $characters[rand(0, $charactersLength - 1)];
     }
     return $randomString;
+}
+
+/**
+ * 安全引用 SQL 标识符
+ *
+ * @param string $name 标识符名称
+ * @param string $driver 数据库驱动，pgsql 或 mysql
+ * @return string 转义后的标识符
+ * @throws \Exception 当标识符为空时抛出
+ */
+function installer_quote_identifier(string $name, string $driver = 'mysql'): string
+{
+    $name = trim($name);
+    if ($name === '') {
+        throw new \Exception('Identifier cannot be empty');
+    }
+    if ($driver === 'pgsql') {
+        return '"' . str_replace('"', '""', $name) . '"';
+    }
+    return '`' . str_replace('`', '``', $name) . '`';
 }
 
 /**
@@ -133,23 +163,32 @@ function execute_install($data): array{
         // 1. 创建数据库并连接
         $type = $db['type'] ?? 'mysql';
         if ($type === 'pgsql') {
-            $dsn = "pgsql:host={$db['host']};port={$db['port']};dbname=postgres";
-            $pdo = new PDO($dsn, $db['user'], $db['pass'], [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
-            // PostgreSQL 检查数据库是否存在
-            $check = $pdo->prepare("SELECT 1 FROM pg_database WHERE datname = ?");
-            $check->execute([$db['name']]);
-            if (!$check->fetch()) {
-                $pdo->exec("CREATE DATABASE \"{$db['name']}\" OWNER \"{$db['user']}\"");
+            $quotedDbName = installer_quote_identifier($db['name'], 'pgsql');
+            $quotedDbUser = installer_quote_identifier($db['user'], 'pgsql');
+            try {
+                // 优先直接连接目标数据库（用户可能已手动创建）
+                $dsn = "pgsql:host={$db['host']};port={$db['port']};dbname={$db['name']}";
+                $pdo = new PDO($dsn, $db['user'], $db['pass'], [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+            } catch (PDOException $e) {
+                // 目标库不存在或无法连接，回退到 postgres 系统库创建
+                $dsn = "pgsql:host={$db['host']};port={$db['port']};dbname=postgres";
+                $pdo = new PDO($dsn, $db['user'], $db['pass'], [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+                // PostgreSQL 检查数据库是否存在
+                $check = $pdo->prepare("SELECT 1 FROM pg_database WHERE datname = ?");
+                $check->execute([$db['name']]);
+                if (!$check->fetch()) {
+                    $pdo->exec("CREATE DATABASE {$quotedDbName} OWNER {$quotedDbUser}");
+                }
+                $pdo = null; // 断开 postgres 连接
+                $dsn = "pgsql:host={$db['host']};port={$db['port']};dbname={$db['name']}";
+                $pdo = new PDO($dsn, $db['user'], $db['pass'], [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
             }
-            $pdo = null; // 断开 postgres 连接
-            $dsn = "pgsql:host={$db['host']};port={$db['port']};dbname={$db['name']}";
-            $pdo = new PDO($dsn, $db['user'], $db['pass'], [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
 
             // PG 15+ 针对 public schema 权限问题的自动修复
             try {
                 // 1. 尝试直接授权 (如果当前用户已经是 Owner 或超级用户)
-                @$pdo->exec("ALTER SCHEMA public OWNER TO \"{$db['user']}\"");
-                $pdo->exec("GRANT ALL ON SCHEMA public TO \"{$db['user']}\"");
+                @$pdo->exec("ALTER SCHEMA public OWNER TO {$quotedDbUser}");
+                $pdo->exec("GRANT ALL ON SCHEMA public TO {$quotedDbUser}");
             } catch (\PDOException $e) {
                 try {
                     // 2. 如果授权失败且 schema 为空，尝试“删掉重建”
@@ -157,8 +196,8 @@ function execute_install($data): array{
                     $checkEmpty = $pdo->query("SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public'");
                     if ($checkEmpty->fetchColumn() == 0) {
                         $pdo->exec("DROP SCHEMA IF EXISTS public CASCADE");
-                        $pdo->exec("CREATE SCHEMA public AUTHORIZATION \"{$db['user']}\"");
-                        $pdo->exec("GRANT ALL ON SCHEMA public TO \"{$db['user']}\"");
+                        $pdo->exec("CREATE SCHEMA public AUTHORIZATION {$quotedDbUser}");
+                        $pdo->exec("GRANT ALL ON SCHEMA public TO {$quotedDbUser}");
                     }
                 } catch (\PDOException $e2) {
                     // 3. 如果还是失败，说明用户权限极低，只能提示手动执行
@@ -313,10 +352,12 @@ function execute_install($data): array{
                         $isUnique = stripos($match[0], 'UNIQUE') !== false;
                         $idxName = $match[1];
                         $idxCols = preg_replace('/\(\d+\)/', '', $match[2]);
+                        $qTableName = installer_quote_identifier($tableName, 'pgsql');
+                        $qIdxName = installer_quote_identifier("idx_{$tableName}_{$idxName}", 'pgsql');
                         if ($isUnique) {
-                            $indexes[] = "CREATE UNIQUE INDEX \"idx_{$tableName}_{$idxName}\" ON \"{$tableName}\" ({$idxCols})";
+                            $indexes[] = "CREATE UNIQUE INDEX {$qIdxName} ON {$qTableName} ({$idxCols})";
                         } else {
-                            $indexes[] = "CREATE INDEX \"idx_{$tableName}_{$idxName}\" ON \"{$tableName}\" ({$idxCols})";
+                            $indexes[] = "CREATE INDEX {$qIdxName} ON {$qTableName} ({$idxCols})";
                         }
                     }
 
@@ -348,7 +389,9 @@ function execute_install($data): array{
                     $pdo->exec($query);
                 } catch (\PDOException $e) {
                     $code = $e->getCode();
-                    if ($code != '42S01' && $code != '42P07') {
+                    // 忽略已存在对象：MySQL 表已存在、PG 重复表/重复对象/唯一冲突
+                    $ignored_codes = ['42S01', '42P07', '42710', '23505'];
+                    if (!in_array($code, $ignored_codes, true)) {
                         throw new \Exception("SQL Error in [{$query}]: " . $e->getMessage());
                     }
                 }
@@ -425,21 +468,23 @@ return [
         $salt = installer_random_str(16);
         $time = time();
 
+        $userTable = installer_quote_identifier($db['prefix'] . 'user', $type);
+        $kvTable = installer_quote_identifier($db['prefix'] . 'kv', $type);
         if ($type === 'pgsql') {
             // PostgreSQL 不支持 REPLACE INTO，使用 ON CONFLICT
-            $sql = "INSERT INTO \"{$db['prefix']}user\" (id, username, email, password, salt, group_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)
+            $sql = "INSERT INTO {$userTable} (id, username, email, password, salt, group_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT (id) DO UPDATE SET username = EXCLUDED.username, email = EXCLUDED.email, password = EXCLUDED.password, salt = EXCLUDED.salt";
             $stmt = $pdo->prepare($sql);
         } else {
-            $stmt = $pdo->prepare("REPLACE INTO `{$db['prefix']}user` (id, username, email, password, salt, group_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)");
+            $stmt = $pdo->prepare("REPLACE INTO {$userTable} (id, username, email, password, salt, group_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)");
         }
         $stmt->execute([1, $admin['user'], $admin['email'], $password_hash, $salt, 1, $time]);
 
         // 5.1 更新站点设置
         if ($type === 'pgsql') {
-            $stmt = $pdo->prepare("SELECT \"value\" FROM \"{$db['prefix']}kv\" WHERE \"key\" = 'setting'");
+            $stmt = $pdo->prepare("SELECT \"value\" FROM {$kvTable} WHERE \"key\" = 'setting'");
         } else {
-            $stmt = $pdo->prepare("SELECT `value` FROM `{$db['prefix']}kv` WHERE `key` = 'setting'");
+            $stmt = $pdo->prepare("SELECT `value` FROM {$kvTable} WHERE `key` = 'setting'");
         }
         $stmt->execute();
         $setting_json = $stmt->fetchColumn();
@@ -449,9 +494,9 @@ return [
                 $setting_data['config']['name'] = $data['sitename'] ?? 'WellCMS';
                 $setting_data['config']['installed'] = 1;
                 if ($type === 'pgsql') {
-                    $update_stmt = $pdo->prepare("UPDATE \"{$db['prefix']}kv\" SET \"value\" = ? WHERE \"key\" = 'setting'");
+                    $update_stmt = $pdo->prepare("UPDATE {$kvTable} SET \"value\" = ? WHERE \"key\" = 'setting'");
                 } else {
-                    $update_stmt = $pdo->prepare("UPDATE `{$db['prefix']}kv` SET `value` = ? WHERE `key` = 'setting'");
+                    $update_stmt = $pdo->prepare("UPDATE {$kvTable} SET `value` = ? WHERE `key` = 'setting'");
                 }
                 $update_stmt->execute([json_encode($setting_data)]);
             }
@@ -459,7 +504,8 @@ return [
 
         // 5.2 PostgreSQL 序列同步 (必须在所有初始数据插入后执行)
         if ($type === 'pgsql') {
-            $stmt = $pdo->query("SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename LIKE '{$db['prefix']}%'");
+            $likePrefix = str_replace(['%', '_'], ['\\%', '\\_'], $db['prefix']);
+            $stmt = $pdo->query("SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename LIKE '{$likePrefix}%' ESCAPE '\\'");
             $tables = $stmt->fetchAll(PDO::FETCH_COLUMN);
             foreach ($tables as $tbl) {
                 // 查找该表下的所有序列关联列
@@ -471,7 +517,10 @@ return [
                         $seq = $seqMatch[1];
                         $col = $s['column_name'];
                         // 同步序列值到最大 ID + 1 (is_called = false，下次 nextval 将返回 MAX+1)
-                        $pdo->exec("SELECT setval('\"{$seq}\"', COALESCE((SELECT MAX(\"{$col}\") FROM \"{$tbl}\"), 0) + 1, false)");
+                        $qSeq = installer_quote_identifier($seq, 'pgsql');
+                        $qCol = installer_quote_identifier($col, 'pgsql');
+                        $qTbl = installer_quote_identifier($tbl, 'pgsql');
+                        $pdo->exec("SELECT setval({$qSeq}, COALESCE((SELECT MAX({$qCol}) FROM {$qTbl}), 0) + 1, false)");
                     }
                 }
             }

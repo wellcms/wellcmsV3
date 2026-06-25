@@ -32,7 +32,9 @@ class Deployer
             throw new \RuntimeException('Migration zip file not found: ' . $zipPath);
         }
 
-        $tempExtractPath = rtrim($destPath, '/') . '/' . ltrim($this->appConfig['tmp_path'], './') . 'upgrade_extract_' . time() . '/';
+        // 从已处理为绝对路径的 tmp_path 中提取相对组件
+        $tmpRel = 'storage/tmp/';  // 与 config/App.php 中 ./storage/tmp/ 等价的不变常量
+        $tempExtractPath = rtrim($destPath, '/') . '/' . $tmpRel . 'upgrade_extract_' . time() . '/';
 
         if (!is_dir($tempExtractPath)) {
             mkdir($tempExtractPath, 0755, true);

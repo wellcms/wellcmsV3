@@ -27,6 +27,9 @@ class ErrorHandlerMiddleware implements \Framework\Http\Interfaces\MiddlewareInt
     /** @var bool */
     private static $registered = false;
 
+    /** @var bool shutdown 阶段标记（此标志存活于整个进程生命周期） */
+    private static $shuttingDown = false;
+
     public function __construct(\Framework\Core\Container $container, bool $debug = false, array $errorConfig = [])
     {
         $this->container = $container;
@@ -36,8 +39,18 @@ class ErrorHandlerMiddleware implements \Framework\Http\Interfaces\MiddlewareInt
 
     public function process(\Framework\Http\Interfaces\ServerRequestInterface $request, \Framework\Http\Interfaces\RequestHandlerInterface $handler): ResponseInterface
     {
+        // 重置 shutdown 标志（重要：Swoole 模式下进程复用，跨请求必须重置）
+        self::$shuttingDown = false;
+
         if (false === self::$registered) {
             set_error_handler([$this, 'handleRawError']);
+
+            // 注册 shutdown-preamble：在 handleShutdown 之前设置标志
+            // 这样后续任何 shutdown 函数中的错误都能检测到
+            register_shutdown_function(function () {
+                self::$shuttingDown = true;
+            });
+
             register_shutdown_function([$this, 'handleShutdown']);
             self::$registered = true;
         }
@@ -55,6 +68,17 @@ class ErrorHandlerMiddleware implements \Framework\Http\Interfaces\MiddlewareInt
     public function handleRawError(int $severity, string $message, string $file = '', int $line = 0): bool
     {
         if (!(error_reporting() & $severity)) return false;
+
+        // shutdown 阶段：不抛异常，直接 error_log 降级
+        // 理由：shutdown 中 uncaught exception = Fatal Error，会破坏正常响应
+        if (self::$shuttingDown) {
+            error_log(sprintf(
+                'Shutdown suppressed: [%d] %s in %s:%d',
+                $severity, $message, $file, $line
+            ));
+            return true;
+        }
+
         throw new \ErrorException($message, 0, $severity, $file, $line);
     }
 

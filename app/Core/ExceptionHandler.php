@@ -8,6 +8,10 @@ declare(strict_types=1);
 
 namespace App\Core;
 
+use App\View\Error\DefaultErrorViewModel;
+use App\View\Error\ErrorViewModelInterface;
+use App\View\Error\ErrorViewRenderer;
+
 class ExceptionHandler
 {
     /** @var \Framework\Core\Container|null */
@@ -18,6 +22,9 @@ class ExceptionHandler
 
     /** @var array */
     protected $errorConfig;
+
+    /** @var ErrorViewRenderer|null */
+    protected $renderer;
 
     public function __construct(?\Framework\Core\Container $container, bool $debug = false, array $errorConfig = [])
     {
@@ -124,23 +131,117 @@ class ExceptionHandler
             return $html;
         }
 
-        $errorFile = defined('APP_PATH') ? APP_PATH . 'app/views/htm/500.htm' : '';
-        if ($errorFile && file_exists($errorFile)) {
-            ob_start();
-            try {
-                include \App\Core\Compile::include($errorFile);
-                $body = ob_get_clean() ?: '<h1>500 Internal Server Error</h1>';
-            } catch (\Throwable $renderError) {
-                if (ob_get_level() > 0) {
-                    ob_end_clean();
-                }
-                error_log('ExceptionHandler render 500.htm failed: ' . $renderError->getMessage());
-                $body = '<h1>500 Internal Server Error</h1>';
-            }
-            return $body;
+        $templateFile = $this->resolveErrorTemplate($code);
+        if (!$templateFile) {
+            return $this->createFallbackHtml($code);
         }
 
-        return '<h1>500 Internal Server Error</h1>';
+        $view = $this->createViewModel();
+        return $this->getRenderer()->render($templateFile, $view);
+    }
+
+    /**
+     * 惰性获取或创建 ErrorViewRenderer。
+     * 优先从容器获取，容器不可用时直接 new 兜底（零依赖）。
+     */
+    protected function getRenderer(): ErrorViewRenderer
+    {
+        if ($this->renderer === null) {
+            try {
+                if ($this->container && $this->container->has(ErrorViewRenderer::class)) {
+                    $this->renderer = $this->container->get(ErrorViewRenderer::class);
+                }
+            } catch (\Throwable $e) {
+                error_log('ExceptionHandler::getRenderer fallback: ' . $e->getMessage());
+            }
+            if ($this->renderer === null) {
+                $this->renderer = new ErrorViewRenderer();
+            }
+        }
+        return $this->renderer;
+    }
+
+    /**
+     * 创建基础 ViewModel（无运行时数据）。
+     * 供启动期兜底路径使用。
+     */
+    private function createViewModel(): ErrorViewModelInterface
+    {
+        // Container::has() 在检查接口时存在 false positive：
+        // 当 ErrorViewModelInterface 文件可被自动加载时，class_exists() 返回 true，
+        // 但接口无法用反射实例化，get() 会抛 ReflectionException。
+        // 下面的 try/catch 兜底捕获此异常并回退到 DefaultErrorViewModel。
+        try {
+            if ($this->container && $this->container->has(ErrorViewModelInterface::class)) {
+                return $this->container->get(ErrorViewModelInterface::class);
+            }
+        } catch (\Throwable $e) {
+            error_log('ExceptionHandler::createViewModel fallback: ' . $e->getMessage());
+        }
+        return new DefaultErrorViewModel();
+    }
+
+    /**
+     * 注入运行时数据到 ViewModel。
+     * 供 ErrorResponseBuilder 路径调用，将 build() 构造的 $data 传入 ViewModel。
+     *
+     * @param array $runtimeData build() 方法构造的错误数据（message, code, debug等）
+     */
+    private function createViewModelWithRuntimeData(array $runtimeData): ErrorViewModelInterface
+    {
+        try {
+            if ($this->container && $this->container->has(ErrorViewModelInterface::class)) {
+                $viewModel = $this->container->get(ErrorViewModelInterface::class);
+                if ($viewModel instanceof ConfiguredErrorViewModel) {
+                    $viewModel->setRuntimeData($runtimeData);
+                }
+                return $viewModel;
+            }
+        } catch (\Throwable $e) {
+            error_log('ExceptionHandler::createViewModelWithRuntimeData fallback: ' . $e->getMessage());
+        }
+
+        return new DefaultErrorViewModel($runtimeData);
+    }
+
+    /**
+     * 将 HTTP 状态码解析为错误模板文件名。
+     * 安全设计：硬编码路径到核心模板目录，不受 Overwrite 机制影响（错误页面统一由核心提供）。
+     *
+     * @return string|null 模板绝对路径，null 表示无对应模板
+     */
+    private function resolveErrorTemplate(int $code): ?string
+    {
+        $map = [
+            500 => '500.htm',
+            404 => '404.htm',
+            403 => '403.htm',
+        ];
+        $file = $map[$code] ?? null;
+        if (!$file) {
+            return null;
+        }
+
+        $path = defined('APP_PATH') ? APP_PATH . 'app/views/htm/' . $file : '';
+        return ($path && file_exists($path)) ? $path : null;
+    }
+
+    /**
+     * 无可用模板时的最终兜底 HTML。
+     */
+    private function createFallbackHtml(int $code): string
+    {
+        $title = $code >= 500 ? '500 Internal Server Error'
+               : ($code === 404 ? '404 Not Found'
+               : ($code === 403 ? '403 Forbidden'
+               : 'Error'));
+
+        return sprintf(
+            '<html><head><title>%s</title><meta charset="utf-8"></head><body style="font-family:sans-serif;padding:2rem;text-align:center"><h1>%d</h1><p>%s</p></body></html>',
+            htmlspecialchars($title, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'),
+            $code,
+            htmlspecialchars($title, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')
+        );
     }
 
     protected function logException(\Throwable $e): void

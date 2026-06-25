@@ -20,13 +20,33 @@ class ConfigServiceProvider implements \Framework\Providers\ServiceProviderInter
 
         // hook app_Providers_ConfigServiceProvider_register_before.php
 
+        // 路径标准化工厂（幂等）
+        $fixPath = function (string $path): string {
+            if ('' === $path) {
+                return $path;
+            }
+            $path = str_replace(['\\', '/'], DIRECTORY_SEPARATOR, $path);
+            $appRoot = rtrim(str_replace(['\\', '/'], DIRECTORY_SEPARATOR, APP_PATH), DIRECTORY_SEPARATOR);
+
+            // 幂等识别：已含 APP_PATH 则直接返回标准化后的路径
+            if (strpos($path, $appRoot . DIRECTORY_SEPARATOR) === 0 || $path === $appRoot) {
+                return rtrim($path, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR;
+            }
+
+            return $appRoot . DIRECTORY_SEPARATOR . ltrim($path, DIRECTORY_SEPARATOR . '\\.');
+        };
+
         // 批量定义配置项（兼容 PHP 7.2）
         $configs = [
             'appConfig' => [
                 'key' => 'app',
-                'process' => function ($appConfig) {
+                'process' => function ($appConfig) use ($fixPath) {
+                    // upload_path: 当前零消费者，保持幂等处理作为防御（默认值 '/storage/upload/' 兼容）
                     if (isset($appConfig['upload_path']) && $appConfig['upload_path'] === '/storage/upload/') {
-                        $appConfig['upload_path'] = APP_PATH . trim($appConfig['upload_path'], './') . '/';
+                        $appConfig['upload_path'] = $fixPath($appConfig['upload_path']);
+                    }
+                    if (isset($appConfig['tmp_path'])) {
+                        $appConfig['tmp_path'] = $fixPath($appConfig['tmp_path']);
                     }
                     return $appConfig;
                 },
@@ -128,9 +148,13 @@ class ConfigServiceProvider implements \Framework\Providers\ServiceProviderInter
             ],
             'loggerConfig' => [
                 'key' => 'logger',
-                'process' => function ($loggerConfig) {
+                'process' => function ($loggerConfig) use ($fixPath) {
                     if (isset($loggerConfig['file']['path'])) {
-                        $loggerConfig['file']['path'] = APP_PATH . trim($loggerConfig['file']['path'], './');
+                        // $fixPath 为目录路径设计（末尾加 /），日志路径是文件路径，去掉尾部
+                        $loggerConfig['file']['path'] = rtrim(
+                            $fixPath($loggerConfig['file']['path']),
+                            DIRECTORY_SEPARATOR
+                        );
                     }
 
                     return $loggerConfig;
@@ -149,20 +173,7 @@ class ConfigServiceProvider implements \Framework\Providers\ServiceProviderInter
             ],
             'uploadConfig' => [
                 'key' => 'upload',
-                'process' => function ($uploadConfig) {
-                    $fixPath = function ($path) {
-                        if (empty($path)) return $path;
-                        $path = str_replace(['\\', '/'], DIRECTORY_SEPARATOR, $path);
-                        $appRoot = rtrim(str_replace(['\\', '/'], DIRECTORY_SEPARATOR, APP_PATH), DIRECTORY_SEPARATOR);
-
-                        // 幂等识别：如果已经是绝对路径（包含 APP_ROOT），则直接返回标准化后的路径
-                        if (strpos($path, $appRoot . DIRECTORY_SEPARATOR) === 0 || $path === $appRoot) {
-                            return rtrim($path, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR;
-                        }
-
-                        return $appRoot . DIRECTORY_SEPARATOR . ltrim($path, DIRECTORY_SEPARATOR . '\\');
-                    };
-
+                'process' => function ($uploadConfig) use ($fixPath) {
                     if (isset($uploadConfig['upload_temp'])) {
                         $uploadConfig['upload_temp'] = $fixPath($uploadConfig['upload_temp']);
                     }

@@ -20,6 +20,8 @@ class SessionService
     protected $cache;
     /** @var \App\Utils\I18nDateFormatter */
     protected $i18nDateFmt;
+    /** @var \Framework\Core\Container */
+    protected $container;
     /** @var array 应用配置 */
     protected $cacheConfig;
     /** @var array 应用配置 */
@@ -27,20 +29,20 @@ class SessionService
     /** @var int 在线保持时间 (秒) */
     protected $sessionsExpire;
 
-    public function __construct(
-        \App\Models\SessionModel $dbModel,
-        \Framework\Cache\Interfaces\CacheInterface $cache,
-        \App\Utils\I18nDateFormatter $i18nDateFmt,
-        array $cacheConfig,
-        array $sessionConfig
-    ) {
+    public function __construct(\Framework\Core\Container $container)
+    {
         // hook app_Services_SessionService_construct_start.php
-        $this->dbModel = $dbModel;
-        $this->cache = $cache;
-        $this->i18nDateFmt = $i18nDateFmt;
-        $this->cacheConfig = $cacheConfig;
-        $this->sessionConfig = $sessionConfig;
+
+        $this->container = $container;
+
+        $this->dbModel       = $container->get(\App\Models\SessionModel::class);
+        $this->cache         = $container->get(\Framework\Cache\Interfaces\CacheInterface::class);
+        $this->i18nDateFmt   = $container->get(\App\Utils\I18nDateFormatter::class);
+        $this->cacheConfig   = $container->get('cacheConfig');
+        $this->sessionConfig = $container->get('sessionConfig');
+
         $this->sessionsExpire = $this->sessionConfig['online_hold_time'] ?? 3600;
+
         // hook app_Services_SessionService_construct_end.php
     }
 

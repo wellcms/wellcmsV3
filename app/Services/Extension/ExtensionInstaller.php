@@ -41,7 +41,7 @@ class ExtensionInstaller
         $this->appConfig = $appConfig;
         $this->pluginPath = rtrim($pluginConfig['plugins_path'], '/\\') . DIRECTORY_SEPARATOR;
         $this->themePath = rtrim($viewConfig['themes_path'], '/\\') . DIRECTORY_SEPARATOR;
-        $this->tmpPath = APP_PATH . ltrim($appConfig['tmp_path'], './');
+        $this->tmpPath = $appConfig['tmp_path'];
     }
 
     /**

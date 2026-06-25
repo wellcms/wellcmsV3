@@ -28,8 +28,6 @@ class UserService
     protected $i18nDateFmt;
     /** @var \App\Services\Storage\StorageManager */
     protected $storageManager;
-    /** @var \Framework\Scheduler\TaskManage */
-    protected $taskManage;
     /** @var \Framework\Core\Container */
     protected $container;
     /** @var array */
@@ -43,34 +41,25 @@ class UserService
     /** @var array */
     protected $guest;
 
-    public function __construct(
-        \App\Models\UserModel $dbModel,
-        \App\Services\Auth\SessionService $sessionService,
-        \App\Services\Auth\GroupService $groupService,
-        \Framework\Cache\Interfaces\CacheInterface $cache,
-        array $appConfig,
-        array $cacheConfig,
-        array $sessionConfig,
-        \Framework\Http\Routing\UrlGeneratorInterface $urlGenerator,
-        \App\Utils\I18nDateFormatter $i18nDateFmt,
-        \App\Services\Storage\StorageManager $storageManager,
-        \Framework\Scheduler\TaskManage $taskManage,
-        \Framework\Core\Container $container
-    ) {
+    public function __construct(\Framework\Core\Container $container)
+    {
         // hook app_Services_UserService_construct_start.php
-        $this->dbModel = $dbModel;
-        $this->sessionService = $sessionService;
-        $this->groupService = $groupService;
-        $this->cache = $cache;
-        $this->appConfig = $appConfig;
-        $this->cacheConfig = $cacheConfig;
-        $this->sessionConfig = $sessionConfig;
-        $this->urlGenerator = $urlGenerator;
-        $this->i18nDateFmt = $i18nDateFmt;
-        $this->storageManager = $storageManager;
-        $this->taskManage = $taskManage;
+
         $this->container = $container;
+
+        $this->dbModel        = $container->get(\App\Models\UserModel::class);
+        $this->sessionService = $container->get(\App\Services\Auth\SessionService::class);
+        $this->groupService   = $container->get(\App\Services\Auth\GroupService::class);
+        $this->cache          = $container->get(\Framework\Cache\Interfaces\CacheInterface::class);
+        $this->appConfig      = $container->get('appConfig');
+        $this->cacheConfig    = $container->get('cacheConfig');
+        $this->sessionConfig  = $container->get('sessionConfig');
+        $this->urlGenerator   = $container->get(\Framework\Http\Routing\UrlGeneratorInterface::class);
+        $this->i18nDateFmt    = $container->get(\App\Utils\I18nDateFormatter::class);
+        $this->storageManager = $container->get(\App\Services\Storage\StorageManager::class);
+
         $this->cacheTtl = $this->cacheConfig['user_ttl'] ?? 7200;
+
         // hook app_Services_UserService_construct_end.php
     }
 
@@ -132,22 +121,36 @@ class UserService
         ]);
 
         // 5. 云存储同步
-        if ($uploadConfig['default'] !== 'local' && $this->taskManage) {
-            $localUrl = $uploadConfig['disks']['local']['url'] ?? '/upload/';
-            $cloudKey = ltrim($localUrl, '/') . 'avatar/' . $ym . '/' . $targetFilename;
-            $this->taskManage->createTask([
-                'className' => \App\Jobs\SyncAvatarToCloudJob::class,
-                'methodName' => 'handle',
-                'args' => [
-                    'userId' => $userId,
-                    'localPath' => $targetPath,
-                    'cloudKey' => $cloudKey,
-                    'uploadConfig' => $uploadConfig
-                ],
-                'priority' => 5,
-                'maxRetries' => 3,
-                'retryDelay' => 10
-            ]);
+        if ($uploadConfig['default'] !== 'local') {
+            $taskManage = null;
+            if ($this->container->has(\Framework\Scheduler\TaskManage::class)) {
+                try {
+                    $taskManage = $this->container->get(\Framework\Scheduler\TaskManage::class);
+                } catch (\Throwable $e) {
+                    // Scheduler/TaskManage 需要 Redis，静默降级（与 PartitionManager 一致）
+                }
+            }
+
+            if ($taskManage) {
+                $localUrl = $uploadConfig['disks']['local']['url'] ?? '/upload/';
+                $cloudKey = ltrim($localUrl, '/') . 'avatar/' . $ym . '/' . $targetFilename;
+                $taskManage->createTask([
+                    'className' => \App\Jobs\SyncAvatarToCloudJob::class,
+                    'methodName' => 'handle',
+                    'args' => [
+                        'userId' => $userId,
+                        'localPath' => $targetPath,
+                        'cloudKey' => $cloudKey,
+                        'uploadConfig' => $uploadConfig
+                    ],
+                    'priority' => 5,
+                    'maxRetries' => 3,
+                    'retryDelay' => 10
+                ]);
+            } else {
+                $logger = $this->container->get(\Framework\Logger\LoggerInterface::class);
+                $logger->info('Avatar cloud sync skipped: scheduler/TaskManage unavailable');
+            }
         }
 
         // 6. 清理旧头像 (支持云端同步删除)

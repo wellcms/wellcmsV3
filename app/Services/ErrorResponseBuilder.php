@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace App\Services;
 
-use Framework\Utils\LoggerContext;
 use App\Utils\PathHelper;
+use App\View\Error\ConfiguredErrorViewModel;
+use App\View\Error\ErrorViewModelInterface;
+use App\View\Error\ErrorViewRenderer;
 use Framework\Core\Container;
 use Framework\Exception\BusinessException;
 use Framework\Exception\ExceptionInterface;
@@ -13,6 +15,7 @@ use Framework\Exception\ValidationException;
 use Framework\Http\Interfaces\ResponseInterface;
 use Framework\Http\Interfaces\ServerRequestInterface;
 use Framework\Http\Response;
+use Framework\Utils\LoggerContext;
 
 class ErrorResponseBuilder
 {
@@ -24,6 +27,9 @@ class ErrorResponseBuilder
 
     /** @var array */
     private $errorConfig;
+
+    /** @var ErrorViewRenderer|null */
+    private $renderer;
 
     public function __construct(Container $container, bool $debug = false, array $errorConfig = [])
     {
@@ -173,117 +179,56 @@ class ErrorResponseBuilder
     }
 
     /**
-     * 审计修订：完整实现点号多级键解析的视图容器，
-     * 确保 500.htm 模板中的 $view->get('website.current.view') 等点号键正常工作。
-     * 同时增加 Compile::include() 的 try/catch + ob 清理保护。
+     * 从容器获取 ErrorViewRenderer，带防御性兜底。
+     */
+    private function getRenderer(): ErrorViewRenderer
+    {
+        if ($this->renderer === null) {
+            try {
+                if ($this->container->has(ErrorViewRenderer::class)) {
+                    $this->renderer = $this->container->get(ErrorViewRenderer::class);
+                }
+            } catch (\Throwable $e) {
+                error_log('ErrorResponseBuilder::getRenderer fallback: ' . $e->getMessage());
+            }
+            if ($this->renderer === null) {
+                $this->renderer = new ErrorViewRenderer();
+            }
+        }
+        return $this->renderer;
+    }
+
+    /**
+     * 渲染系统错误视图。
+     * 复用统一 ErrorViewRenderer，注入 ConfiguredErrorViewModel + 运行时数据。
      */
     private function renderView(string $templateFile, array $data, int $statusCode): ResponseInterface
     {
-        $view = new class($data) {
-            private $data;
-            private $cache = [];
-
-            public function __construct(array $data)
-            {
-                $this->data = $data;
-            }
-
-            /**
-             * 支持点号多级键访问。
-             * 例如 $view->get('website.current.view', '/views/')
-             *
-             * @param mixed $default
-             * @return mixed
-             */
-            public function get(string $key, $default = null)
-            {
-                $cacheKey = 'get-' . $key;
-                if (isset($this->cache[$cacheKey])) {
-                    return $this->cache[$cacheKey];
-                }
-
-                // 一级键快速路径
-                if (false === strpos($key, '.')) {
-                    $this->cache[$cacheKey] = isset($this->data[$key]) ? $this->data[$key] : $default;
-                    return $this->cache[$cacheKey];
-                }
-
-                // 多级键完整解析
-                $result = $this->resolveNestedKey($key);
-                $this->cache[$cacheKey] = ($result !== null) ? $result : $default;
-                return $this->cache[$cacheKey];
-            }
-
-            /**
-             * 递归解析点号分隔的多级键。
-             * 安全阈值：最多 10 层，防止异常深度遍历。
-             *
-             * @return mixed|null
-             */
-            private function resolveNestedKey(string $key)
-            {
-                if (isset($this->cache['nested-' . $key])) {
-                    return $this->cache['nested-' . $key];
-                }
-
-                $keys = explode('.', $key);
-                if (count($keys) > 10) {
-                    return null;
-                }
-
-                $current = $this->data;
-                foreach ($keys as $segment) {
-                    if (!is_array($current) || !array_key_exists($segment, $current)) {
-                        $this->cache['nested-' . $key] = null;
-                        return null;
-                    }
-                    $current = $current[$segment];
-                }
-
-                $this->cache['nested-' . $key] = $current;
-                return $current;
-            }
-
-            /**
-             * 安全输出（自动 htmlspecialchars），支持多级键。
-             *
-             * @param mixed $default
-             * @return string
-             */
-            public function e(string $key, $default = '')
-            {
-                $value = $this->get($key, $default);
-                return htmlspecialchars((string)$value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-            }
-
-            /**
-             * 原始输出，支持多级键。
-             *
-             * @param mixed $default
-             * @return mixed
-             */
-            public function raw(string $key, $default = '')
-            {
-                return $this->get($key, $default);
-            }
-        };
-
-        try {
-            ob_start();
-            include \App\Core\Compile::include($templateFile);
-            $body = ob_get_clean() ?: '';
-        } catch (\Throwable $renderError) {
-            // 审计修订：确保 ob 缓冲在任何异常路径下都被清理
-            if (ob_get_level() > 0) {
-                ob_end_clean();
-            }
-            $this->logInternalError('Error view render failed', $renderError);
-            return $this->createFallbackHtmlResponse($data, $statusCode);
-        }
+        $view = $this->getErrorViewModelWithRuntimeData($data);
+        $body = $this->getRenderer()->render($templateFile, $view);
 
         $response = new Response($statusCode);
         $response->getBody()->write($body);
         return $response->withHeader('Content-Type', 'text/html; charset=utf-8');
+    }
+
+    /**
+     * 获取 ErrorViewModel 并注入运行时数据。
+     * ViewModel 使用分层设计：配置层（appConfig 默认值）+ 运行时层（build() 的数据）。
+     * 运行时数据优先级高于配置默认值，确保 message、debug、timestamp 等动态字段正确传递。
+     */
+    private function getErrorViewModelWithRuntimeData(array $runtimeData): ErrorViewModelInterface
+    {
+        try {
+            $viewModel = $this->container->get(ErrorViewModelInterface::class);
+            if ($viewModel instanceof ConfiguredErrorViewModel) {
+                $viewModel->setRuntimeData($runtimeData);
+            }
+            return $viewModel;
+        } catch (\Throwable $e) {
+            error_log('ErrorResponseBuilder::getErrorViewModelWithRuntimeData fallback: ' . $e->getMessage());
+            return new ConfiguredErrorViewModel([], $runtimeData);
+        }
     }
 
     private function createFallbackHtmlResponse(array $data, int $statusCode): ResponseInterface

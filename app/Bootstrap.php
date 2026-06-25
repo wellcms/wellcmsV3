@@ -49,6 +49,9 @@ class Bootstrap
             // 核心模型服务层优先注册
             'Model' => \App\Providers\ModelServiceProvider::class,
             // hook app_Bootstrap_providers_center.php
+            // 错误视图 Provider 必须在 Application 之前注册，
+            // 确保 ErrorResponseBuilder 创建前 ErrorViewRenderer/ErrorViewModel 已就绪。
+            'ErrorView' => \App\Providers\ErrorViewServiceProvider::class,
             // 应用层 Provider
             'Application' => \App\Providers\ApplicationServiceProvider::class,
             // hook app_Bootstrap_providers_middle.php
