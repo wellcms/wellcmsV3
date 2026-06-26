@@ -82,7 +82,8 @@ function check_environment()
 /**
  * 测试数据库连接
  */
-function check_db_connection($cfg): array{
+function check_db_connection($cfg): array
+{
     $type = $cfg['type'] ?? 'mysql';
     try {
         if ($type === 'pgsql') {
@@ -144,7 +145,8 @@ function installer_quote_identifier(string $name, string $driver = 'mysql'): str
 /**
  * 执行安装
  */
-function execute_install($data): array{
+function execute_install($data): array
+{
     try {
         set_time_limit(0); // 防止大型数据库导入超时
         $db = $data['db'];
@@ -517,7 +519,7 @@ return [
                         $seq = $seqMatch[1];
                         $col = $s['column_name'];
                         // 同步序列值到最大 ID + 1 (is_called = false，下次 nextval 将返回 MAX+1)
-                        $qSeq = installer_quote_identifier($seq, 'pgsql');
+                        $qSeq = "'" . str_replace("'", "''", $seq) . "'::regclass";
                         $qCol = installer_quote_identifier($col, 'pgsql');
                         $qTbl = installer_quote_identifier($tbl, 'pgsql');
                         $pdo->exec("SELECT setval({$qSeq}, COALESCE((SELECT MAX({$qCol}) FROM {$qTbl}), 0) + 1, false)");
