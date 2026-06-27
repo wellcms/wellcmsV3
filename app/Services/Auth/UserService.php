@@ -84,6 +84,7 @@ class UserService
 
     /**
      * 更新用户头像 (封装上传、存储、云同步、清理旧头像)
+     * 工业级约定：后端强制重编码为 PNG，统一扩展名。
      */
     public function updateAvatar(int $userId, \Framework\Http\Interfaces\UploadedFileInterface $file): string
     {
@@ -91,36 +92,100 @@ class UserService
         if (empty($user)) throw new BusinessException('User not found');
 
         $uploadConfig = $this->container->get('uploadConfig');
+        $localRoot = $uploadConfig['disks']['local']['root'];
+        $language = $this->getLanguage();
 
         // 1. 准备目录: avatar/YYYYMM/
         $ym = date('Ym');
         $relativeDir = 'avatar' . DIRECTORY_SEPARATOR . $ym . DIRECTORY_SEPARATOR;
 
-        // 2. 以时间戳命名
+        // 2. 以时间戳命名，扩展名强制为 .png
         $timestamp = (string)time();
-        $ext = strtolower(pathinfo($file->getClientFilename(), PATHINFO_EXTENSION)) ?: 'png';
-        $targetFilename = $timestamp . '.' . $ext;
+        $targetFilename = $timestamp . '.png';
         $relativeKey = $relativeDir . $targetFilename;
-
-        // 3. 执行移动到本地存储根目录
-        $localRoot = $uploadConfig['disks']['local']['root'];
         $targetPath = $localRoot . $relativeKey;
 
+        // 3. 先将上传文件安全落地到临时目录
+        $tempDir = $localRoot . 'temp' . DIRECTORY_SEPARATOR;
+        $tmpPath = $tempDir . uniqid('avatar_', true);
+
         try {
-            $file->moveTo($targetPath);
-        } catch (\Exception $e) {
-            $language = $this->getLanguage();
-            $msg = $language ? $language->get('write_to_file_failed') : 'write_to_file_failed';
-            throw new BusinessException($msg, 14);
+            if (!is_dir($tempDir) && !mkdir($tempDir, 0755, true) && !is_dir($tempDir)) {
+                $msg = $language ? $language->get('write_to_file_failed') : 'write_to_file_failed';
+                throw new BusinessException($msg, 14);
+            }
+
+            $file->moveTo($tmpPath);
+
+            // 4. 校验真实图片类型，拒绝伪装文件
+            $imageInfo = @getimagesize($tmpPath);
+            if (!$imageInfo) {
+                $msg = $language ? $language->get('upload_failed') : 'upload_failed';
+                throw new BusinessException($msg, 15);
+            }
+
+            $allowedTypes = [IMAGETYPE_GIF, IMAGETYPE_JPEG, IMAGETYPE_PNG];
+            if (defined('IMAGETYPE_BMP')) $allowedTypes[] = IMAGETYPE_BMP;
+            if (defined('IMAGETYPE_WEBP')) $allowedTypes[] = IMAGETYPE_WEBP;
+            if (!in_array($imageInfo[2], $allowedTypes, true)) {
+                $msg = $language ? $language->get('upload_failed') : 'upload_failed';
+                throw new BusinessException($msg, 15);
+            }
+
+            // 5. 创建目标目录
+            $targetDir = dirname($targetPath);
+            if (!is_dir($targetDir) && !mkdir($targetDir, 0755, true) && !is_dir($targetDir)) {
+                $msg = $language ? $language->get('write_to_file_failed') : 'write_to_file_failed';
+                throw new BusinessException($msg, 14);
+            }
+
+            // 6. 强制重编码为 PNG（优先 Imagick，降级 GD）
+            if (extension_loaded('imagick')) {
+                $imagick = new \Imagick($tmpPath);
+                // 限制最大分辨率，防止超大图消耗内存
+                $imagick->thumbnailImage(1024, 1024, true);
+                $imagick->setImageFormat('PNG');
+                $imagick->setImageCompressionQuality(95);
+                $imagick->stripImage(); // 去除 EXIF/ICC/注释等元数据
+                $imagick->writeImage($targetPath);
+                $imagick->clear();
+                $imagick->destroy();
+            } else {
+                $imageType = $imageInfo[2];
+                if ($imageType === IMAGETYPE_GIF) {
+                    $src = imagecreatefromgif($tmpPath);
+                } elseif ($imageType === IMAGETYPE_JPEG) {
+                    $src = imagecreatefromjpeg($tmpPath);
+                } elseif ($imageType === IMAGETYPE_PNG) {
+                    $src = imagecreatefrompng($tmpPath);
+                } elseif (defined('IMAGETYPE_BMP') && $imageType === IMAGETYPE_BMP) {
+                    $src = imagecreatefrombmp($tmpPath);
+                } elseif (defined('IMAGETYPE_WEBP') && $imageType === IMAGETYPE_WEBP) {
+                    $src = imagecreatefromwebp($tmpPath);
+                } else {
+                    $src = false;
+                }
+                if (!$src) {
+                    $msg = $language ? $language->get('upload_failed') : 'upload_failed';
+                    throw new BusinessException($msg, 15);
+                }
+                imagepng($src, $targetPath, 6);
+                imagedestroy($src);
+            }
+        } finally {
+            // 7. 清理临时文件
+            if (file_exists($tmpPath) && strpos($tmpPath, $tempDir) === 0) {
+                @unlink($tmpPath);
+            }
         }
 
-        // 4. 更新数据库 (状态 0 为本地)
+        // 8. 更新数据库 (状态 0 为本地)
         $this->update($userId, [
             'avatar' => $timestamp,
             'avatar_status' => 0
         ]);
 
-        // 5. 云存储同步
+        // 9. 云存储同步
         if ($uploadConfig['default'] !== 'local') {
             $taskManage = null;
             if ($this->container->has(\Framework\Scheduler\TaskManage::class)) {
@@ -153,7 +218,7 @@ class UserService
             }
         }
 
-        // 6. 清理旧头像 (支持云端同步删除)
+        // 10. 清理旧头像 (支持云端同步删除)
         if (!empty($user['avatar']) && (int)$user['avatar'] !== (int)$timestamp) {
             $this->storageManager->deleteAvatar((int)$user['avatar'], (int)($user['avatar_status'] ?? 0));
         }

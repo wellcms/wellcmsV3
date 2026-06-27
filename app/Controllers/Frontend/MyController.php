@@ -161,6 +161,17 @@ class MyController extends \App\Controllers\Base\BaseController
 
         if (!$file instanceof \Framework\Http\Interfaces\UploadedFileInterface || $file->getError() !== UPLOAD_ERR_OK) return $this->errorMessage($this->language->get('upload_failed'), 1);
 
+        // 前置校验：扩展名白名单与文件大小（服务层仍会强制重编码为 PNG）
+        $allowedExt = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'];
+        $clientName = $file->getClientFilename();
+        $ext = strtolower(pathinfo($clientName, PATHINFO_EXTENSION));
+        if (!in_array($ext, $allowedExt, true)) {
+            return $this->errorMessage($this->language->get('upload_failed'), 1);
+        }
+        if ($file->getSize() > 5 * 1024 * 1024) {
+            return $this->errorMessage($this->language->get('upload_failed'), 1);
+        }
+
         try {
             // 业务逻辑已下沉至 $this->userService->updateAvatar
             $url = $this->userService->updateAvatar((int)$user['id'], $file);

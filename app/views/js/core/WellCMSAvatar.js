@@ -207,7 +207,8 @@ async openAvatarCropper(file, options = {}) {
 
           ctx.drawImage(img, cropX, cropY, cropW, cropH, 0, 0, width, height);
           canvas.toBlob((blob) => {
-            const result = new File([blob], file.name, { type: "image/png" });
+            const newName = file.name.replace(/\.[^.]+$/, "") + ".png";
+            const result = new File([blob], newName, { type: "image/png" });
             resolve(result);
           }, "image/png");
         },
