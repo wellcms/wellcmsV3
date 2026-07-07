@@ -195,7 +195,7 @@ class PluginController extends BaseController
         $read['icon_url'] = $this->extensionManager->getIconUrl($dir, $this->currentType, $read['icon'] ?? '');
 
         $read['operation_links'] = $this->extensionManager->buildOperationLinks($read);
-        foreach (['enable', 'disable', 'install', 'uninstall'] as $action) {
+        foreach (['enable', 'disable', 'install', 'uninstall', 'upgrade'] as $action) {
             if (!empty($read['operation_links'][$action])) {
                 $read['operation_links'][$action]['arg'] = ['dir' => $dir, '_csrf_token' => $csrfToken];
             }

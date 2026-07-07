@@ -18,7 +18,7 @@ class Runtime
     public static function getPidFile(): string
     {
         if (empty(self::$pidFile)) {
-            $path = defined('APP_PATH') ? APP_PATH : dirname(__DIR__, 2) . DIRECTORY_SEPARATOR;
+            $path = \defined('APP_PATH') ? \APP_PATH : \dirname(__DIR__, 2) . DIRECTORY_SEPARATOR;
             self::$pidFile = $path . 'storage/tmp/wellcms.pid';
         }
         return self::$pidFile;
@@ -55,7 +55,7 @@ class Runtime
         $pid = (int)@file_get_contents($pidFile);
         if ($pid > 0) {
             // SIGUSR1 (10) 是 Swoole 约定的热重载所有 Worker 的信号
-            $signal = defined('SIGUSR1') ? SIGUSR1 : 10;
+            $signal = \defined('SIGUSR1') ? SIGUSR1 : 10;
             // 尝试发送信号。如果 FPM 用户无权操作 Swoole 进程，这里会返回 false
             return @posix_kill($pid, $signal);
         }
@@ -68,7 +68,7 @@ class Runtime
      */
     public static function isSwoole(): bool
     {
-        return extension_loaded('swoole') && defined('SWOOLE_VERSION');
+        return \extension_loaded('swoole') && \defined('SWOOLE_VERSION');
     }
 
     /**

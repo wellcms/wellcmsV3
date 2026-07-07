@@ -68,7 +68,7 @@ class Container
     {
         $abstract = $this->resolveAlias($abstract);
 
-        if (true === $defer && is_string($concrete) && class_exists($concrete)) {
+        if (true === $defer && is_string($concrete) && class_exists($concrete) && !interface_exists($concrete)) {
             $deferredId = 'deferred:' . $abstract;
             $classToBuild = $concrete;
 
@@ -127,7 +127,7 @@ class Container
 
         return isset($this->instances[$id])
             || isset($this->bindings[$id])
-            || class_exists($id);
+            || (class_exists($id) && !interface_exists($id));
     }
 
     public function getInstances(): array
@@ -268,7 +268,7 @@ class Container
     // 导出类定义用于缓存 (供 Compile.php 使用)
     public function getReflectionDefinition(string $class): ?array
     {
-        if (!class_exists($class)) return null;
+        if (!class_exists($class) || interface_exists($class)) return null;
         $rc = new \ReflectionClass($class);
         $ctor = $rc->getConstructor();
         $params = [];
@@ -301,7 +301,7 @@ class Container
 
         /* A) 反射缓存 */
         if (!isset(self::$reflectionCache[$class])) {
-            if (!\class_exists($class)) throw new \InvalidArgumentException("Class not found: $class");
+            if (!\class_exists($class) || \interface_exists($class)) throw new \InvalidArgumentException("Class not found: $class");
 
             $rc   = new \ReflectionClass($class);
             $ctor = $rc->getConstructor();

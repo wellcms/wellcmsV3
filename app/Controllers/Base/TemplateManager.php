@@ -54,7 +54,7 @@ class TemplateManager
 
         // 2. 尝试 L2 缓存：持久化路径映射 (template_map.php)
         if (null === $this->templateMap) {
-            $this->templateMap = (file_exists($this->mapPath) && (!defined('DEBUG') || DEBUG === 0))
+            $this->templateMap = (file_exists($this->mapPath) && (!defined('DEBUG') || \DEBUG === 0))
                 ? include $this->mapPath
                 : [];
         }
@@ -74,7 +74,7 @@ class TemplateManager
         if (!empty($filePath)) {
             $this->templateMap[$mapInnerKey] = $filePath;
             // 如果处于非调试模式或特定条件下，持久化缓存
-            if (!defined('DEBUG') || DEBUG === 0) {
+            if (!defined('DEBUG') || \DEBUG === 0) {
                 $this->persistMap();
             }
         }

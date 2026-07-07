@@ -39,14 +39,22 @@ class PartitionRegistry
     /** @var DatabaseInterface */
     private $db;
 
+    /** @var PartitionDialectInterface */
+    private $dialect;
+
     /**
-     * @param CacheInterface    $cache
-     * @param DatabaseInterface $db
+     * @param CacheInterface                 $cache
+     * @param DatabaseInterface              $db
+     * @param PartitionDialectInterface|null $dialect 分区方言（null 时自动检测）
      */
-    public function __construct(CacheInterface $cache, DatabaseInterface $db)
-    {
+    public function __construct(
+        CacheInterface $cache,
+        DatabaseInterface $db,
+        ?PartitionDialectInterface $dialect = null
+    ) {
         $this->cache = $cache;
         $this->db = $db;
+        $this->dialect = $dialect ?? PartitionDialectFactory::createFromConnection($db);
     }
 
     /**
@@ -115,22 +123,46 @@ class PartitionRegistry
         $prefixEscaped = str_replace('_', '\\_', $prefix);
         $pdo = $this->db->createFreshConnection('master');
 
-        // 获取当前数据库名
-        $stmt = $pdo->query("SELECT DATABASE()");
-        $dbName = $stmt->fetchColumn();
-
-        // Step 1: 查询所有 RANGE 分区表（排除纯 HASH）
-        // MySQL 5.7 兼容：SUBPARTITION_COUNT 不可用，改用 COUNT DISTINCT 统计子分区
-        // COUNT(DISTINCT PARTITION_NAME) 正确统计父分区数，排除子分区行的干扰
-        $sql = "SELECT TABLE_NAME, PARTITION_METHOD, SUBPARTITION_METHOD,
-                       COUNT(DISTINCT PARTITION_NAME) AS total_par,
-                       SUM(CASE WHEN SUBPARTITION_NAME IS NOT NULL THEN 1 ELSE 0 END) AS total_sub
-                FROM information_schema.PARTITIONS
-                WHERE TABLE_SCHEMA = " . $pdo->quote($dbName) . "
-                  AND TABLE_NAME LIKE " . $pdo->quote($prefixEscaped . '%') . "
-                  AND PARTITION_METHOD IS NOT NULL
-                  AND PARTITION_METHOD IN ('RANGE', 'RANGE COLUMNS')
-                GROUP BY TABLE_NAME, PARTITION_METHOD, SUBPARTITION_METHOD";
+        if ($pdo->getAttribute(\PDO::ATTR_DRIVER_NAME) === 'pgsql') {
+            // PG 实现：从 pg_class 查询分区表
+            // 通过检测直接子表的 partstrat 判断是否有子分区
+            $sql = "SELECT
+                        c.relname AS TABLE_NAME,
+                        'RANGE' AS PARTITION_METHOD,
+                        CASE WHEN EXISTS (
+                            SELECT 1 FROM pg_inherits i_sub
+                            JOIN pg_partitioned_table pt_sub
+                              ON pt_sub.partrelid = i_sub.inhrelid
+                            WHERE i_sub.inhparent = c.oid
+                              AND pt_sub.partstrat = 'h'
+                        ) THEN 'HASH' ELSE NULL END AS SUBPARTITION_METHOD,
+                        COUNT(DISTINCT p.inhrelid) AS total_par,
+                        COUNT(DISTINCT l.inhrelid) AS total_sub
+                    FROM pg_class c
+                    JOIN pg_partitioned_table pt ON pt.partrelid = c.oid
+                    LEFT JOIN pg_inherits i ON i.inhparent = c.oid
+                    LEFT JOIN pg_class p ON p.oid = i.inhrelid
+                      AND p.relispartition = true
+                    LEFT JOIN pg_inherits i2 ON i2.inhparent = p.oid
+                    LEFT JOIN pg_class l ON l.oid = i2.inhrelid
+                    WHERE c.relname LIKE '"
+                        . str_replace("'", "''", $prefixEscaped) . "%'
+                      AND c.relispartition = false
+                      AND pt.partstrat = 'r'
+                    GROUP BY c.relname, pt.partstrat";
+        } else {
+            // MySQL 原有实现（保持不变）
+            $sql = "SELECT TABLE_NAME, PARTITION_METHOD, SUBPARTITION_METHOD,
+                           COUNT(DISTINCT PARTITION_NAME) AS total_par,
+                           SUM(CASE WHEN SUBPARTITION_NAME IS NOT NULL
+                               THEN 1 ELSE 0 END) AS total_sub
+                    FROM information_schema.PARTITIONS
+                    WHERE TABLE_SCHEMA = DATABASE()
+                      AND TABLE_NAME LIKE '" . str_replace("'", "''", $prefixEscaped) . "%'
+                      AND PARTITION_METHOD IS NOT NULL
+                      AND PARTITION_METHOD IN ('RANGE', 'RANGE COLUMNS')
+                    GROUP BY TABLE_NAME, PARTITION_METHOD, SUBPARTITION_METHOD";
+        }
 
         $stmt = $pdo->query($sql);
         $rows = $stmt->fetchAll(\PDO::FETCH_ASSOC);

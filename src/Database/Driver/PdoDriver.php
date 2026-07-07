@@ -340,7 +340,7 @@ class PdoDriver implements \Framework\Database\Interfaces\DatabaseInterface, \Fr
         // 启用 FOUND_ROWS 使 MySQL 的 rowCount() 返回 WHERE 匹配到的行数，统一全驱动行为。
         // 兼容 PHP 7.2（PDO::MYSQL_ATTR_FOUND_ROWS）至 PHP 8.4+（Pdo\Mysql::ATTR_FOUND_ROWS）。
         if ($driver === 'mysql') {
-            $foundRowsAttr = PHP_VERSION_ID >= 80400 && defined('Pdo\Mysql::ATTR_FOUND_ROWS')
+            $foundRowsAttr = PHP_VERSION_ID >= 80400 && \defined('Pdo\Mysql::ATTR_FOUND_ROWS')
                 ? constant('Pdo\Mysql::ATTR_FOUND_ROWS')
                 : PDO::MYSQL_ATTR_FOUND_ROWS;
             $opts[$foundRowsAttr] = true;
@@ -1026,14 +1026,14 @@ class PdoDriver implements \Framework\Database\Interfaces\DatabaseInterface, \Fr
             $stmt->execute();
 
             // 成功追踪
-            defined('DEBUG') && DEBUG > 1 && $this->debugWriteLog('SUCCESS', $sql, $params, microtime(true) - $start);
+            \defined('DEBUG') && \DEBUG > 1 && $this->debugWriteLog('SUCCESS', $sql, $params, microtime(true) - $start);
         } catch (\Throwable $e) {
             // 关键：记录导致事务失败或操作失败的真实异常
-            defined('DEBUG') && DEBUG > 1 && $this->debugWriteLog('ERROR: ' . $e->getMessage(), $sql, $params, microtime(true) - $start);
+            \defined('DEBUG') && \DEBUG > 1 && $this->debugWriteLog('ERROR: ' . $e->getMessage(), $sql, $params, microtime(true) - $start);
             throw $e;
         }
 
-        if (defined('SCHEDULER_MODE') && \SCHEDULER_MODE) return $stmt;
+        if (\defined('SCHEDULER_MODE') && \SCHEDULER_MODE) return $stmt;
 
         $elapsed = microtime(true) - $start;
         $fullSql = $this->interpolate($sql, $params);
@@ -1347,7 +1347,7 @@ class PdoDriver implements \Framework\Database\Interfaces\DatabaseInterface, \Fr
      * @param int $time
      */
     private function debugWriteLog($status, $sql, $params, $time): void{
-        $appPath = defined('APP_PATH') ? APP_PATH : (dirname(__DIR__, 3) . '/');
+        $appPath = \defined('APP_PATH') ? \APP_PATH : (\dirname(__DIR__, 3) . '/');
         if (empty($appPath) || !is_dir($appPath . 'storage/')) {
             error_log("APP_PATH invalid or storage directory missing, cannot write SQL debug log");
             return;
@@ -1386,4 +1386,3 @@ class PdoDriver implements \Framework\Database\Interfaces\DatabaseInterface, \Fr
         }
     }
 }
-

@@ -73,6 +73,22 @@ class OtherController extends BaseController
         if ($memoryCache) {
             $cache->clear();
 
+            // 如果配置了 Redis 缓存，同时清理 scheduler 残留的 dedupeKey（通过连接池）
+            try {
+                $cacheConfig = $this->container->get('cacheConfig');
+                if (!empty($cacheConfig['stores']['redis']) && $cache instanceof \Framework\Cache\CacheManager) {
+                    $redis = $cache->original('redis');
+                    if ($redis !== null) {
+                        $keys = $redis->keys('scheduler:dedupe:*');
+                        if (!empty($keys)) {
+                            $redis->del($keys);
+                        }
+                    }
+                }
+            } catch (\Throwable $e) {
+                // scheduler 不可用时静默跳过
+            }
+
             // 深度清理：重置容器中所有有状态服务的内存数据 (解决 StatefulTrait 污染)
             $instances = $this->container->getInstances();
             foreach ($instances as $name => $instance) {

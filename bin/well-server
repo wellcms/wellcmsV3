@@ -93,7 +93,7 @@ try {
             $pidFile = \Framework\Utils\Runtime::getPidFile();
             if (file_exists($pidFile)) {
                 $pid = (int)file_get_contents($pidFile);
-                $signal = defined('SIGTERM') ? SIGTERM : 15;
+                $signal = \defined('SIGTERM') ? SIGTERM : 15;
                 if (send_signal($pid, $signal)) {
                     console_log("[STOPPING] WellCMS Server (PID:$pid)...", '33');
                     // 循环等待进程完全关闭端口
@@ -113,10 +113,24 @@ try {
             break;
 
         case 'restart':
-            // 优雅重启流程
-            passthru("php " . __FILE__ . " stop");
+            // 优雅重启流程（复用 PHP 逻辑，避免 shell 中转）
+            $pidFile = \Framework\Utils\Runtime::getPidFile();
+            if (file_exists($pidFile)) {
+                $pid = (int)file_get_contents($pidFile);
+                $signal = \defined('SIGTERM') ? SIGTERM : 15;
+                if (send_signal($pid, $signal)) {
+                    console_log("[STOPPING] WellCMS Server (PID:$pid)...", '33');
+                    $limit = 5;
+                    while ($limit > 0 && send_signal($pid, 0)) {
+                        sleep(1);
+                        $limit--;
+                    }
+                }
+                @unlink($pidFile);
+            }
             sleep(1);
-            passthru("php " . __FILE__ . " start " . ($daemon ? "-d" : ""));
+            $server = new \Framework\Http\SwooleServer($host, $port, ['daemonize' => $daemon]);
+            $server->start();
             break;
 
         case 'reload':

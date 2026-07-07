@@ -33,7 +33,7 @@ final class IpHelper
      */
     protected function getState(string $name, $default = null)
     {
-        if (defined('SWOOLE_VERSION') && \extension_loaded('swoole')) {
+        if (\defined('SWOOLE_VERSION') && \extension_loaded('swoole')) {
             $coroClass = "\\Swoole\\Coroutine";
             if (call_user_func([$coroClass, 'getCid']) > 0) {
                 $ctx = call_user_func([$coroClass, 'getContext']);
@@ -49,7 +49,7 @@ final class IpHelper
      */
     protected function setState(string $name, $value): void
     {
-        if (defined('SWOOLE_VERSION') && \extension_loaded('swoole')) {
+        if (\defined('SWOOLE_VERSION') && \extension_loaded('swoole')) {
             $coroClass = "\\Swoole\\Coroutine";
             if (call_user_func([$coroClass, 'getCid']) > 0) {
                 $ctx = call_user_func([$coroClass, 'getContext']);

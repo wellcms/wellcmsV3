@@ -536,6 +536,19 @@ LUA;
     }
 
     /**
+     * SETEX 别名：Scheduler 工业级组件使用此命名
+     *
+     * @param string $key
+     * @param int    $ttl
+     * @param mixed  $value
+     * @return bool
+     */
+    public function setex(string $key, int $ttl, $value): bool
+    {
+        return $this->set($key, $value, $ttl);
+    }
+
+    /**
      * 原子设置缓存（仅当 key 不存在时）。
      *
      * @param string $key
@@ -636,6 +649,17 @@ LUA;
     {
         $full = $this->withPrefix($key);
         return (int)$this->call(self::S_ADJ_EXPIRE, [$full, $step, $ttl], 1);
+    }
+
+    /**
+     * INCR 别名：Scheduler 工业级组件使用此命名
+     *
+     * @param string $key
+     * @return int
+     */
+    public function incr(string $key): int
+    {
+        return $this->increment($key, 1, 0);
     }
 
     /**

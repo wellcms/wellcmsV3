@@ -38,7 +38,7 @@ class SwooleServer
             'reload_async' => true,
             'max_wait_time' => 30,
             'pid_file' => \Framework\Utils\Runtime::getPidFile(),
-            'log_file' => APP_PATH . 'storage/logs/swoole.log',
+            'log_file' => \APP_PATH . 'storage/logs/swoole.log',
             'enable_coroutine' => true,
         ], $options);
     }
@@ -49,14 +49,14 @@ class SwooleServer
     public function start(): void
     {
         // 0. 核心引擎预热（工业级必须：采集钩子、合并覆盖文件）
-        $containerCache = APP_PATH . 'storage/tmp/container.php';
+        $containerCache = \APP_PATH . 'storage/tmp/container.php';
         \App\Core\Compile::init($containerCache);
 
         // 1. 初始化容器 (预热静态依赖)
         $this->container = \App\Bootstrap::init();
 
         // 2. 容器性能优化：加载预编译定义 (重要)
-        if (file_exists($containerCache) && (!defined('DEBUG') || (int)DEBUG === 0)) {
+        if (\file_exists($containerCache) && (!\defined('DEBUG') || (int)\DEBUG === 0)) {
             $defs = require $containerCache;
             $this->container->loadDefinitions($defs);
         }
@@ -80,7 +80,7 @@ class SwooleServer
 
     private function printBanner(): void
     {
-        $v = defined('SWOOLE_VERSION') ? \SWOOLE_VERSION : 'Unknown';
+        $v = \defined('SWOOLE_VERSION') ? \SWOOLE_VERSION : 'Unknown';
         echo "\033[32m";
         echo "--------------------------------------------------\n";
         echo " WellCMS 3.0 Swoole Server \n";
@@ -176,7 +176,7 @@ class SwooleServer
             if ($swooleResponse && is_a($swooleResponse, "\\Swoole\\Http\\Response")) {
                 /** @noinspection PhpUndefinedMethodInspection */
                 $swooleResponse->status(500);
-                $msg = defined('DEBUG') && DEBUG ? $e->getMessage() : 'Internal Server Error';
+                $msg = \defined('DEBUG') && \DEBUG ? $e->getMessage() : 'Internal Server Error';
                 /** @noinspection PhpUndefinedMethodInspection */
                 $swooleResponse->end($msg);
             } else {

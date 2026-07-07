@@ -80,13 +80,21 @@ abstract class BaseController
     protected function render(string $templateName, array $data = [], $templateDir = false, string $id = ''): ResponseInterface
     {
         // hook app_Controllers_Base_BaseController_render_start.php
+        try {
+            $this->container->get(\App\Services\Storage\TempCleanupService::class)->maybeTriggerGC();
+        } catch (\Throwable $e) {
+            // 降级：TempCleanupService 不可用时不阻断页面渲染
+        }
 
         $data = (array)$this->initializeCommonData($data);
         $data = (array)$this->processUserData($data);
         $data = (array)$this->setLanguageData($data);
         $data = (array)$this->setDebugData($data);
 
-        $templatePath = $this->templateManager->template($templateDir, $templateName, $id, $this->request);
+        $routeMeta = $this->request->getAttribute('_route_meta', []);
+        $templatePath = (!empty($routeMeta['api']))
+            ? ''
+            : $this->templateManager->template($templateDir, $templateName, $id, $this->request);
 
         $data['website']['extra'] = $data['extra'] ?? [];
 
@@ -294,7 +302,7 @@ abstract class BaseController
 
         // hook app_Controllers_Base_BaseController_setDebugData_before.php
 
-        if (defined('DEBUG') && DEBUG > 1) {
+        if (\defined('DEBUG') && \DEBUG > 1) {
             $requestData = array_merge(
                 /** 获取 Cookie 参数 */
                 $this->request->getCookieParams() ?? [],
@@ -374,7 +382,7 @@ abstract class BaseController
 
         // 首页/无游标不加过滤
         $op = null;
-        if ($cursorId !== null) {
+        if ($cursorId !== null && $cursorId !== 0) {
             $op = $this->cursorOp($orderBy, $dirFlag, $inclusiveFirst);
         }
 

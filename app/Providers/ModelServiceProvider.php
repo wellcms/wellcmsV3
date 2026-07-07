@@ -23,6 +23,7 @@ class ModelServiceProvider implements \Framework\Providers\ServiceProviderInterf
                 \App\Models\LogModel::class,
                 \App\Models\NavigationModel::class,
                 \App\Models\RecycleModel::class,
+                \App\Models\SchedulerTaskModel::class,
                 \App\Models\SessionDataModel::class,
                 \App\Models\SessionModel::class,
                 \App\Models\UserModel::class,
@@ -73,11 +74,34 @@ class ModelServiceProvider implements \Framework\Providers\ServiceProviderInterf
                 $container->bind($service, $service, true, true);
             }
 
+            // 模块服务（非懒加载）：含 getter 返回类型声明，需真实对象而非 LazyLoadingProxy
+            $moduleServicesEager = [
+                \App\Services\ExternalLinkService::class,
+                \App\Services\LinkService::class,
+            ];
+
+            // hook app_Providers_ModelServiceProvider_register_module_services_eager.php
+
+            foreach ($moduleServicesEager as $service) {
+                $container->bind($service, $service, true, false);
+            }
+
             // 特殊构造服务
             $container->bind(\App\Controllers\Admin\Service\TokenManager::class, function ($container) {
                 return new \App\Controllers\Admin\Service\TokenManager(
                     $container->get('appConfig'),
                     $container->get('sessionConfig')
+                );
+            }, true, true);
+
+            // TempCleanupService: 含 array $uploadConfig 非类型化参数，需闭包显式注入
+            $container->bind(\App\Services\Storage\TempCleanupService::class, function ($container) {
+                return new \App\Services\Storage\TempCleanupService(
+                    $container->get('uploadConfig'),
+                    $container->get(\Framework\Logger\LoggerInterface::class),
+                    $container->get(\Framework\Cache\Interfaces\CacheInterface::class),
+                    $container->get(\App\Services\Content\TempContentService::class),
+                    $container
                 );
             }, true, true);
 

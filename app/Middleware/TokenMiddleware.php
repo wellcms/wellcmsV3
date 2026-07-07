@@ -69,7 +69,7 @@ class TokenMiddleware implements \Framework\Http\Interfaces\MiddlewareInterface
             $logger = $this->container->get(\Framework\Logger\LoggerInterface::class);
             $logger->error("Error in " . get_class($this) . ": " . $e->getMessage());
             // 如果是 DEBUG 模式，就把异常抛出来，方便前端看到
-            if (defined('DEBUG') && DEBUG >= 2) throw $e;
+            if (\defined('DEBUG') && \DEBUG >= 2) throw $e;
 
             $messageController = $this->container->get(\App\Controllers\Base\MessageController::class);
             return $messageController->errorMessage('Token verification error: ' . $e->getMessage(), 500);

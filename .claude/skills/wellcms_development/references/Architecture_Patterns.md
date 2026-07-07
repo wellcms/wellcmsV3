@@ -7,7 +7,6 @@
 *   **Action 签名绝对标准**：所有 public Action 必须声明为 `public function actionName(\Framework\Http\Interfaces\ServerRequestInterface $request): \Framework\Http\Interfaces\ResponseInterface`。严禁省略 `$request` 参数或返回类型。后台控制器 `use AdminTrait;`，前台控制器 `use FrontendTrait;`，API 控制器不使用 Trait。
 *   **模板名路由驱动**：控制器中**严禁硬编码模板文件名**。模板名必须从路由元数据读取：`$layout = $request->getAttributes()['_route_meta']['layout'] ?? '默认模板名';`，再传入 `$this->render($layout, $data, '插件目录名')`。`render()` 第三个参数传**插件目录名字符串**（如 `'well_forum'`），严禁传 `true` 或第四个 `$id` 参数。
 *   **JSON 响应绝对委托**：主程序 `BaseController` 已注入 `ResponseFormatter`（`$this->responseFormatter`）。插件控制器**严禁**定义任何 `jsonResponse()`、`apiResponse()` 等包装/委托方法。必须直接在 Action 中调用 `$this->responseFormatter->jsonResponseFormat(array $data)` 返回 PSR-7 Response。标准 API 结构 `{status, code, message, data, timestamp}` 在调用点显式组装，`status` 取值仅为 `'success'` 或 `'error'`，严禁使用布尔型 `success`；禁止通过 Trait、BaseController 子类或任何中间层二次封装。
-*   **插件控制器严禁定义构造函数（P1铁律）**：插件控制器必须**完全继承 `BaseController` 的构造函数**，**严禁**覆写 `__construct`。所有插件 Service 必须在 Action 方法内通过 `$this->container->get(ServiceClass::class)` 获取。原因：容器通过 `LazyLoadingProxy` 延迟加载 Service，构造函数注入会导致 `TypeError`（期望 `ConcreteService` 但收到 `LazyLoadingProxy`），运行时 Fatal Error。参考实现：`plugins/well_forum/Controllers/Frontend/ForumController.php` 未定义构造函数，Service 通过 `$this->container->get()` 获取。
 
 ## 1.1 控制器 render() 数据合约 (Controller Data Contract)
 
@@ -135,11 +134,9 @@ public function action(\Framework\Http\Interfaces\ServerRequestInterface $reques
 | 项目 | 后台 (AdminTrait) | 前台 (FrontendTrait) |
 |------|-------------------|---------------------|
 | 菜单来源 | `$this->getAdminMenu()` | `$this->getNavigation()` + 自定义 `myMenu()` |
-| `render()` 第3参 | **主程序**传 `true` / **插件**传目录名 | **主程序**传 `false` / **插件**传目录名 |
+| `render()` 第3参 | 插件目录名字符串 `'well_xxx'` | `false` |
 | `menu_fixed` | 控制侧边栏高亮 | 控制个人中心或主导航高亮 |
 | `header` 作用 | `<title>` + meta 标签（均需设置） | 同上 |
-
-> **`render()` 第3参语义**：该参数是 `TemplateManager` 的路径查找标识。`false` 只在 `app/views/htm/` 下搜索，`true` 只在 `app/views/admin/` 下搜索，**字符串**（插件目录名）只在 `plugins/{目录名}/views/htm/` 下搜索。主程序控制器（`app/Controllers/`）的模板在 `app/views/` 下，故前台传 `false`、后台传 `true`；**插件控制器**（`plugins/xxx/Controllers/`）的模板在插件目录内，故**无论前台后台都要传插件目录名字符串**（如 `'well_forum'`、`'well_page'`）。
 
 ## 2. 依赖注入与构造铁律 (DI & Constructor Law)
 *   **禁止直连**：控制器、Service 严禁直接 `new` 实例化其他 Service/Model，必须由容器注入。

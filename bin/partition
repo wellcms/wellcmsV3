@@ -82,13 +82,15 @@ HELP;
  * PHP 7.2 兼容。
  */
 
-// ========== 防重入：pid 文件锁 ==========
-$lockFile = sys_get_temp_dir() . '/partition_maintain.lock';
-$lockFp = fopen($lockFile, 'c');
-if (!$lockFp || !flock($lockFp, LOCK_EX | LOCK_NB)) {
-    fwrite(STDERR, "ERROR: Another partition maintenance process is already running.\n");
-    exit(1);
+// ========== 解析参数（在获取锁之前执行，避免 --help 需先获取锁） ==========
+$opts = getopt('', array('dry-run', 'table:', 'help'));
+
+if (isset($opts['help'])) {
+    showHelp();
 }
+
+$dryRun = isset($opts['dry-run']);
+$table = isset($opts['table']) ? $opts['table'] : null;
 
 // ========== 环境初始化 ==========
 define('IN_WELLCMS', true);
@@ -106,17 +108,13 @@ if (DEBUG) {
 require APP_PATH . 'app/Core/Compile.php';
 require APP_PATH . 'app/Core/Autoload.php';
 
-// ========== 解析参数 ==========
-$opts = getopt('', array('dry-run', 'table:', 'help'));
-
-if (isset($opts['help'])) {
-    flock($lockFp, LOCK_UN);
-    fclose($lockFp);
-    showHelp();
+// ========== 防重入：pid 文件锁 ==========
+$lockFile = sys_get_temp_dir() . '/partition_maintain.lock';
+$lockFp = fopen($lockFile, 'c');
+if (!$lockFp || !flock($lockFp, LOCK_EX | LOCK_NB)) {
+    fwrite(STDERR, "ERROR: Another partition maintenance process is already running.\n");
+    exit(1);
 }
-
-$dryRun = isset($opts['dry-run']);
-$table = isset($opts['table']) ? $opts['table'] : null;
 
 // ========== 初始化容器 ==========
 try {

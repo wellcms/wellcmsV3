@@ -29,12 +29,15 @@ class GenerateClassmapJob implements \Framework\Scheduler\Interfaces\JobInterfac
      */
     public function handle(?string $_task_id = null): array
     {
-        $basePath = defined('APP_PATH') ? APP_PATH : dirname(__DIR__, 3) . DIRECTORY_SEPARATOR;
+        $basePath = \defined('APP_PATH') ? \APP_PATH : \dirname(__DIR__, 3) . DIRECTORY_SEPARATOR;
         $targetFile = $basePath . 'storage' . DIRECTORY_SEPARATOR . 'tmp' . DIRECTORY_SEPARATOR . 'classmap.php';
 
         // 1. [关键逻辑] 检查是否需要执行扫描
-        // 如果文件存在且最后修改时间在 24 小时内，则跳过扫描，仅维持心跳
-        $needsScan = !file_exists($targetFile) || (time() - filemtime($targetFile) > 86400);
+        // DEBUG=0 时仅检查文件是否存在，不执行 filemtime（铁律 #12：I/O 冻结）
+        // DEBUG>0 时使用 filemtime 动态判断（24 小时过期）
+        $needsScan = !file_exists($targetFile) || (
+            defined('DEBUG') && DEBUG > 0 && (time() - filemtime($targetFile) > 86400)
+        );
 
         $result = [
             'status' => 'skipped',
@@ -46,7 +49,7 @@ class GenerateClassmapJob implements \Framework\Scheduler\Interfaces\JobInterfac
             $result = $this->generate($basePath, $targetFile);
         }
 
-        // 2. [自循环] 5 分钟后再次检查 (保证目录被清空后能快速发现)
+        // 2. [自循环] 1 小时后再次检查 (保证目录被清空后能快速发现)
         // 使用 dedupeKey 确保队列中永远只有一个监控任务
         $this->taskManage->createTask([
             'className'  => self::class,

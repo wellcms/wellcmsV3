@@ -1,55 +1,5 @@
 # WellCMS 3.0 安全与业务严谨性 (Security & Integrity)
 
-## 0. 威胁模型三步法 (Threat Model First)
-
-**核心原则**：先画威胁模型再写代码。"事后粘贴的安全控制只是猜测。"
-
-### Step 1: 映射信任边界 (Map Trust Boundaries)
-
-识别不可信数据穿越系统边界的位置。WellCMS 中每一条边界都是攻击面：
-
-| 信任边界 | 入口点 | 风险等级 |
-|---------|--------|---------|
-| HTTP 请求 | 所有 `GET/POST` 路由、API 端点 | 🔴 最高 |
-| 表单提交 | 所有 POST 表单（含 `ajax-form`） | 🔴 最高 |
-| 文件上传 | `UploadController`、`AttachmentService` | 🔴 最高 |
-| Webhook/回调 | 插件外部回调入口 | 🟡 高 |
-| 模板渲染 | `$view->raw('key')` 输出用户内容 | 🟡 高 |
-| 数据库输入 | `where` 条件、`insert`/`update` 数据 | 🟡 高 |
-| 缓存/ Session | Redis/APCu 存储的用户数据 | 🟡 高 |
-| 外部 API 调用 | `MarketClient`、第三方服务集成 | 🟡 高 |
-| 语言包输入 | 插件语言文件中的动态占位符 | 🟢 中 |
-| Hook 文件编译 | 插件 Hook 注入点 | 🟢 中 |
-
-### Step 2: 命名资产 (Name the Assets)
-
-明确需要保护的资产：
-
-- **凭据**：用户密码哈希、Session ID、CSRF Token、API Token
-- **用户数据**：手机号、邮箱、IP 地址、个人资料（PII）
-- **业务数据**：帖子、回复、订单、积分、权限配置
-- **管理操作**：管理员后台操作（插件安装/卸载、主题切换、配置修改）
-- **支付/资产**：涉及资金流动或实物资产的业务（如有）
-
-### Step 3: STRIDE 遍历
-
-对每一条信任边界，逐项检查 STRIDE 威胁：
-
-| 威胁类型 | WellCMS 防护手段 | 常见失误 |
-|---------|----------------|---------|
-| **S**poofing（身份伪造） | `AuthMiddleware` + `requiresAuth` | 路由缺少 `requiresAuth` 声明，未登录可访问需鉴权接口 |
-| **T**ampering（数据篡改） | `CsrfMiddleware` + 参数化查询 | POST 路由缺少 `requiresCsrf`，CSRF 中间件不生效 |
-| **R**epudiation（抵赖） | 审计日志、操作记录 | 关键操作未记日志，事后无法追溯 |
-| **I**nformation Disclosure（信息泄露） | `XssFilterMiddleware` + 输出编码 | `$view->raw('key')` 输出未经转义的用户内容 |
-| **D**enial of Service（拒绝服务） | `ThrottleMiddleware` + 分区维护 | 未配置限流或分区计划，大流量冲击数据库 |
-| **E**levation of Privilege（权限提升） | `UserPermMiddleware` + `requiresAdminSignIn` | 路由 `requiresUserPerm` 缺少 `'enable' => true`，权限校验被跳过 |
-
-**滥用案例（Abuse Cases）**：在写正常用例的同时，问自己"如果我要攻击这个接口，会怎么做？"——那个答案就是你的第一轮测试用例。
-
-**触发条件**：所有涉及用户输入、认证鉴权、敏感数据存储、外部 API 集成、文件上传/Webhook/支付处理的代码，**必须先做威胁模型分析再编码**。
-
----
-
 ## 1. 双态 CSRF Token 闭环
 *   **路由声明**：所有 POST 路由必须声明 `'requiresCsrf' => ['enable' => true, 'ttl' => 3600]`，CSRF 校验由 `CsrfMiddleware` 在路由层自动完成。
 *   **控制器零代码**：控制器 **严禁** 调用 `verifyCsrfToken()` 手动验证，token 仅需传入模板供前端携带。

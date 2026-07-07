@@ -55,7 +55,7 @@ class HttpResultCallback implements \Framework\Scheduler\Interfaces\ResultCallba
             'signature'  => $this->generateSignature($task->id, $success, $elapsed)
         ];
 
-        $method = strtoupper($task->callbackMethod) === 'GET' ? 'GET' : 'POST';
+        $method = $task->callbackMethod === \Framework\Scheduler\Task::METHOD_GET ? 'GET' : 'POST';
         $jsonPayload = json_encode($payload, JSON_UNESCAPED_UNICODE);
 
         if (json_last_error() !== JSON_ERROR_NONE) {
@@ -181,25 +181,7 @@ class HttpResultCallback implements \Framework\Scheduler\Interfaces\ResultCallba
             throw new \InvalidArgumentException("HTTPS required for callback: {$url}");
         } */
 
-        // 防止 SSRF 私网访问
-        $ip = gethostbyname($parts['host']);
-        if (preg_match('/^(127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[0-1])\.|169\.254\.)/', $ip)) {
-            throw new \Framework\Exception\BusinessException("阻止回调至内网IP: {$ip}");
-        }
-
-        /* // 检查是否在允许域名内
-        $allowed = false;
-        foreach ($this->allowedDomains as $domain) {
-            if (str_ends_with($parts['host'], $domain)) {
-                $allowed = true;
-                break;
-            }
-        }
-        if (!$allowed) {
-            throw new \InvalidArgumentException("Domain not in whitelist: {$parts['host']}");
-        } */
-
-        // DNS解析和IP检查
+        // DNS解析和IP检查（使用 gethostbynamel 获取全部 IP，避免重复解析）
         $this->validateHostIp($parts['host']);
     }
 
@@ -269,7 +251,7 @@ class HttpResultCallback implements \Framework\Scheduler\Interfaces\ResultCallba
 
         $secret = $_ENV['SCHEDULER_SECRET'] ?? '';
         if (empty($secret)) {
-            $cfgFile = defined('APP_PATH') ? APP_PATH . 'config/App.php' : dirname(__DIR__, 2) . '/config/App.php';
+            $cfgFile = \defined('APP_PATH') ? \APP_PATH . 'config/App.php' : \dirname(__DIR__, 2) . '/config/App.php';
             if (file_exists($cfgFile)) {
                 $cfg = include $cfgFile;
                 $secret = $cfg['auth_key'] ?? '';

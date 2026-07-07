@@ -46,7 +46,7 @@ try {
     $container = \App\Bootstrap::init();
 
     // 加载容器编译缓存 (Performance)
-    if (file_exists($containerCache) && (!defined('DEBUG') || DEBUG == 0)) {
+    if (file_exists($containerCache) && (!\defined('DEBUG') || \DEBUG == 0)) {
         $defs = require $containerCache;
         $container->loadDefinitions($defs);
     }
@@ -54,45 +54,79 @@ try {
     // [轻量化方案] 仅确保核心任务已进入队列
     $taskManage = $container->get(\Framework\Scheduler\TaskManage::class);
 
-    // 1. 类映射表监控
-    $taskManage->createTask([
-        'className'  => \Framework\Scheduler\Jobs\GenerateClassmapJob::class,
-        'methodName' => 'handle',
-        'priority'   => 9,
-        'dedupeKey'  => 'system:classmap_monitor'
-    ]);
+    // ———————————— 启动时 MySQL 批量恢复 ————————————
+    // 从 MySQL 恢复所有 pending/retrying 任务到 Redis，
+    // 确保重启后无 orphan 任务。RecoveryEngine 直接写 Redis HASH+ZSET，
+    // 不走 PersistenceQueue，不会触发 MySQL 二次 INSERT。
+    try {
+        $schedulerConfig = $container->get('schedulerConfig');
+    } catch (\Throwable $e) {
+        $schedulerConfig = [];
+    }
+    if (!empty($schedulerConfig['v2_enabled'])
+        && !empty($schedulerConfig['dual_write']['enabled'])) {
+        try {
+            $recoveryEngine = $container->get(\Framework\Scheduler\RecoveryEngine::class);
+            $recovered = $recoveryEngine->recoverAll();
+            if ($recovered > 0) {
+                fwrite(STDOUT, sprintf("[Scheduler] Recovered %d pending tasks from MySQL\n", $recovered));
+            }
+        } catch (\Throwable $e) {
+            error_log('[Scheduler] Startup recovery skipped: ' . $e->getMessage());
+        }
+    }
+    // ———————————————————————————————————————————————
 
-    // 2. Session GC 垃圾回收监控
-    $taskManage->createTask([
-        'className'  => \App\Jobs\SessionGCJob::class,
-        'methodName' => 'handle',
-        'priority'   => 10,
-        'dedupeKey'  => 'system:session_gc_monitor'
-    ]);
+    // ———————————— 恢复后确保 ConfigDrivenJob 巡检已启动 ————————————
+    // bootstrap() 在 SchedulerServiceProvider::register() 时已执行一次，
+    // 但当时 recoverAll 尚未运行。现在 MySQL 任务已在 Redis 中，
+    // 确保 bootstrap 的 hasActiveTaskOfClass 能看到已恢复的旧 CDJ。
+    try {
+        \Framework\Scheduler\Jobs\ConfigDrivenJob::ensureBootstrapped($taskManage);
+    } catch (\Throwable $e) {
+        error_log('[Scheduler] ConfigDrivenJob ensureBootstrapped: ' . $e->getMessage());
+    }
+    // ————————————————————————————————————————————————————————————————————
 
-    // 3. well_article 阅读数批量落盘监控
-    $taskManage->createTask([
-        'className'  => \Plugins\well_article\Jobs\ArticleViewFlushJob::class,
-        'methodName' => 'handle',
-        'priority'   => 5,
-        'dedupeKey'  => 'well_article:view_flush_monitor'
-    ]);
+    // ———————————— 启动监控任务（感知 Fix 1 已恢复的任务）————————————
+    // 优先信任 Fix 1 恢复的旧任务。hasActiveTaskOfClass 只查 Redis，
+    // 但 Fix 1 已确保 Redis = MySQL 快照，结果准确。
+    $bootTasks = [
+        [
+            'className'  => \Framework\Scheduler\Jobs\GenerateClassmapJob::class,
+            'methodName' => 'handle',
+            'priority'   => 9,
+            'dedupeKey'  => 'system:classmap_monitor',
+        ],
+        [
+            'className'  => \App\Jobs\SessionGCJob::class,
+            'methodName' => 'handle',
+            'priority'   => 10,
+            'dedupeKey'  => 'system:session_gc_monitor',
+        ],
+        [
+            'className'  => \App\Jobs\TempUploadCleanupJob::class,
+            'methodName' => 'handle',
+            'priority'   => 10,
+            'dedupeKey'  => 'system:temp_upload_cleanup_monitor',
+        ],
+    ];
 
-    // 4. well_article 定时发布队列监控
-    $taskManage->createTask([
-        'className'  => \Plugins\well_article\Jobs\ArticlePublishJob::class,
-        'methodName' => 'handle',
-        'priority'   => 5,
-        'dedupeKey'  => 'well_article:scheduled_publish_monitor'
-    ]);
+    foreach ($bootTasks as $taskDef) {
+        if ($taskManage->hasActiveTaskOfClass($taskDef['className'])) {
+            // Fix 1 已恢复或原有任务链仍在运行，无需重复创建
+            continue;
+        }
 
-    // 5. well_article 历史归档
-    $taskManage->createTask([
-        'className'  => \Plugins\well_article\Jobs\ArticleArchiveJob::class,
-        'methodName' => 'handle',
-        'priority'   => 3,
-        'dedupeKey'  => 'well_article:archive_monitor'
-    ]);
+        $result = $taskManage->createTask($taskDef);
+        if (empty($result['status']) || $result['status'] !== 'success') {
+            $msg = isset($result['msg']) ? $result['msg'] : 'unknown';
+            error_log(sprintf(
+                '[Scheduler] Failed to create boot task %s: %s',
+                $taskDef['className'], $msg
+            ));
+        }
+    }
 
     // 获取命令行参数 (用于 Supervisor 调优)
     // 格式: php scheduler.php --max-runs=5000 --memory=128
@@ -107,9 +141,101 @@ try {
     $executor = $container->get(\Framework\Scheduler\TaskExecutor::class);
 
     // 6. 启动循环
-    $executor->runLoop($maxRuns, $memory);
+    if (extension_loaded('swoole') && \Swoole\Coroutine::getCid() > 0) {
+        // Swoole 协程模式 → 异步协程池
+        $workers = (int)(($container->get('schedulerConfig') ?: [])['swoole_workers'] ?? 4);
+        runLoopAsync($executor, $container, $workers, $maxRuns, $memory);
+    } else {
+        // FPM/CLI 模式 → 同步循环（保持原有逻辑）
+        $executor->runLoop($maxRuns, $memory);
+    }
 } catch (\Throwable $e) {
     $msg = "[FATAL] Scheduler crashed: " . $e->getMessage();
     fwrite(STDERR, $msg . PHP_EOL . $e->getTraceAsString() . PHP_EOL);
     exit(1); // 退出码 1 通知 Supervisor 异常退出（会触发重启）
+}
+
+/**
+ * Swoole 协程模式任务处理循环
+ * #2 修复: Container 通过闭包 use() 传入，不使用不存在的 getInstance()
+ * #3 修复: 通过新增的 TaskExecutor::getQueue() 获取队列
+ * #4 修复: 通过新增的 TaskExecutor::processTask() 执行任务
+ *
+ * @param \Framework\Scheduler\TaskExecutor $executor     现有 TaskExecutor
+ * @param \Framework\Core\Container          $container    框架容器
+ * @param int                                $workers      并发协程数
+ * @param int                                $maxRuns      最大处理任务数
+ * @param int                                $memoryLimit  内存上限
+ */
+function runLoopAsync(
+    \Framework\Scheduler\TaskExecutor $executor,
+    \Framework\Core\Container $container,
+    int $workers = 4,
+    int $maxRuns = 5000,
+    int $memoryLimit = 128
+): void {
+    $processedCount = new \Swoole\Atomic(0);
+    $shouldQuit = new \Swoole\Atomic(0);
+
+    // #2 修复: 通过传入的 $container 获取服务
+    $coordinator = null;
+    try {
+        $coordinator = $container->get(\Framework\Scheduler\WorkerCoordinator::class);
+    } catch (\Throwable $e) {
+    }
+
+    if ($coordinator !== null) {
+        \Swoole\Timer::tick(15000, function () use ($coordinator) {
+            $coordinator->heartbeat();
+        });
+    }
+
+    $recoveryEngine = null;
+    try {
+        $recoveryEngine = $container->get(\Framework\Scheduler\RecoveryEngine::class);
+    } catch (\Throwable $e) {
+    }
+
+    if ($recoveryEngine !== null) {
+        \Swoole\Timer::tick(60000, function () use ($recoveryEngine) {
+            $recoveryEngine->handleZombies();
+        });
+    }
+
+    // #3 / #4 修复: 使用新增的 processTask() 和 getQueue() 公共方法
+    for ($i = 0; $i < $workers; $i++) {
+        \Swoole\Coroutine::create(function () use (
+            $executor, $processedCount, $shouldQuit, $maxRuns, $memoryLimit
+        ) {
+            while (!$shouldQuit->get()) {
+                if ($maxRuns > 0 && $processedCount->get() >= $maxRuns) {
+                    $shouldQuit->set(1);
+                    break;
+                }
+                if ($memoryLimit > 0 && memory_get_usage(true) > $memoryLimit * 1024 * 1024) {
+                    $shouldQuit->set(1);
+                    break;
+                }
+
+                $task = $executor->getQueue()->pop();
+
+                if ($task === null) {
+                    \Swoole\Coroutine::sleep(0.5);
+                    continue;
+                }
+
+                // #3 修复: 每个协程独立 Redis 连接，防止连接共享错乱
+                $executor->reconnectRedis();
+
+                try {
+                    $executor->processTask($task);
+                    $processedCount->add(1);
+                } catch (\Throwable $e) {
+                    // P1 #5 修复: 异常后 sleep 避免 CPU 100% 空转
+                    error_log('[Scheduler] Async worker exception: ' . $e->getMessage());
+                    \Swoole\Coroutine::sleep(1);
+                }
+            }
+        });
+    }
 }

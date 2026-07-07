@@ -62,7 +62,7 @@ class Compile
         // 注意：此路径独立于 ConfigServiceProvider 处理
         // 原因：Compile::init() 在 ConfigServiceProvider::register() 之前执行（见 index.php:52-62）
         // 确保 tmp_path 为绝对目录
-        $appPath = defined('APP_PATH') ? APP_PATH : dirname(__DIR__, 2) . '/';
+        $appPath = defined('APP_PATH') ? \APP_PATH : dirname(__DIR__, 2) . '/';
         self::$config['tmp_path'] = $appPath . ltrim(self::$config['tmp_path'], './');
 
         // 2. 尝试从清单 (Manifest) 加载插件信息与钩子 (生产环境 O(1) 核心)
@@ -160,7 +160,7 @@ class Compile
      * 按照 核心 -> 插件包 -> 主题包 -> 插件钩子 顺序进行物理合并
      */
     protected static function compileLanguage(string $locale, string $type, string $cacheFile, array $themeFiles = []): void{
-        $appPath = defined('APP_PATH') ? APP_PATH : dirname(__DIR__, 2) . '/';
+        $appPath = defined('APP_PATH') ? \APP_PATH : dirname(__DIR__, 2) . '/';
         $allLang = [];
 
         // 1. Layer 1: 加载核心包 (Base)
@@ -342,7 +342,7 @@ class Compile
         if (empty(self::$config)) {
             self::init(null);
         }
-        $appPath = defined('APP_PATH') ? APP_PATH : dirname(__DIR__, 2) . '/';
+        $appPath = defined('APP_PATH') ? \APP_PATH : dirname(__DIR__, 2) . '/';
         $ext = strtolower(pathinfo($srcFile, PATHINFO_EXTENSION));
 
         // 1. 确定子目录类型
@@ -495,7 +495,7 @@ class Compile
      */
     public static function compileAssets(): void
     {
-        $appPath = defined('APP_PATH') ? APP_PATH : dirname(__DIR__, 2) . '/';
+        $appPath = defined('APP_PATH') ? \APP_PATH : dirname(__DIR__, 2) . '/';
         $runtimePath = $appPath . 'public/static/runtime/';
         if (!is_dir($runtimePath)) @mkdir($runtimePath, 0755, true);
 
@@ -773,8 +773,8 @@ class Compile
 
                 // 白名单验证 - 只允许特定目录
                 $allowedDirs = [
-                    (defined('APP_PATH') ? APP_PATH : dirname(__DIR__, 2) . '/') . 'app/views/',
-                    (defined('APP_PATH') ? APP_PATH : dirname(__DIR__, 2) . '/') . 'themes/',
+                    (defined('APP_PATH') ? \APP_PATH : dirname(__DIR__, 2) . '/') . 'app/views/',
+                    (defined('APP_PATH') ? \APP_PATH : dirname(__DIR__, 2) . '/') . 'themes/',
                 ];
 
                 // 解析绝对路径
@@ -929,7 +929,7 @@ class Compile
             return;
         }
 
-        $appPath = defined('APP_PATH') ? APP_PATH : dirname(__DIR__, 2) . '/';
+        $appPath = defined('APP_PATH') ? \APP_PATH : dirname(__DIR__, 2) . '/';
         $overwriteCache = [];
 
         foreach ($enabled as $plugin) {
@@ -1009,7 +1009,7 @@ class Compile
 
     private static function securePath(string $path): string
     {
-        $appPath = defined('APP_PATH') ? APP_PATH : dirname(__DIR__, 2) . '/';
+        $appPath = defined('APP_PATH') ? \APP_PATH : dirname(__DIR__, 2) . '/';
 
         // 统一分隔符并解析符号链接
         $path = strtr($path, '\\', '/');
@@ -1085,13 +1085,13 @@ class Compile
         // PHP 8.0+ 引入的限定名 Token（用于检测 \eval()、Namespace\eval() 等）
         $qualifiedTokenIds = [];
         if (defined('T_NAME_FULLY_QUALIFIED')) {
-            $qualifiedTokenIds[] = T_NAME_FULLY_QUALIFIED;
+            $qualifiedTokenIds[] = \T_NAME_FULLY_QUALIFIED;
         }
         if (defined('T_NAME_QUALIFIED')) {
-            $qualifiedTokenIds[] = T_NAME_QUALIFIED;
+            $qualifiedTokenIds[] = \T_NAME_QUALIFIED;
         }
         if (defined('T_NAME_RELATIVE')) {
-            $qualifiedTokenIds[] = T_NAME_RELATIVE;
+            $qualifiedTokenIds[] = \T_NAME_RELATIVE;
         }
 
         // 为代码添加 PHP 标签以便 token_get_all 正确解析
@@ -1229,7 +1229,7 @@ class Compile
         }
         if (!empty(self::$enabledPlugins)) return self::$enabledPlugins;
 
-        $appPath = defined('APP_PATH') ? APP_PATH : dirname(__DIR__, 2) . '/';
+        $appPath = defined('APP_PATH') ? \APP_PATH : dirname(__DIR__, 2) . '/';
         $dirs = glob($appPath . 'plugins/*', GLOB_ONLYDIR);
         $enabled = [];
 

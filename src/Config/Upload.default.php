@@ -230,5 +230,20 @@ return [
     'clamav_socket' => '/var/run/clamav/clamd.ctl',
     'ttl' => 6 * 3600, // 上传会话有效期，单位秒
     'logging_enabled' => true,
-    'logging_level' => 'info'
+    'logging_level' => 'info',
+
+    // 临时文件自动清理
+    'temp_cleanup' => [
+        'min_age' => 3600,
+        'default_max_age' => 21600,
+        'chunk_max_age' => 21600,
+        'namespace_whitelist' => [],
+        'whitelist_max_age' => 86400,
+        'draft_lookup_days' => 30,
+        'draft_lookup_limit' => 500,
+        'gc_batch_size' => 20,
+        'scheduler_batch_size' => 200,
+        'gc_probability' => 0.01,
+        'gc_min_interval' => 3600,
+    ],
 ];

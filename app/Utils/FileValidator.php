@@ -77,7 +77,7 @@ class FileValidator
         }
 
         // FPM 模式下需要 is_uploaded_file 校验来源；Swoole 模式下 $request->files 由引擎直接解析，来源可信
-        if ((!defined('SWOOLE_MODE') || !SWOOLE_MODE) && !is_uploaded_file($file['tmp_name'])) {
+        if ((!\defined('SWOOLE_MODE') || !\SWOOLE_MODE) && !is_uploaded_file($file['tmp_name'])) {
             throw new UploadSecurityException("File was not uploaded through HTTP POST");
         }
 

@@ -147,6 +147,7 @@ class StoreController extends BaseController
                 'price' => $this->language->get('price'),
                 'free' => $this->language->get('free'),
                 'install' => $this->language->get('install'),
+                'installed' => $this->language->get('installed'),
                 'upgrade' => $this->language->get('upgrade'),
                 'download' => $this->language->get('download'),
                 'author' => $this->language->get('author'),

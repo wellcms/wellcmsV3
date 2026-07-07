@@ -78,59 +78,7 @@ DirectoryHelper::rmdir($icon_path); // 安全删除
 2. **前缀引用**：所有 SQL 必须包含 `{$db->prefix}`。
 3. **方言转换保护**：DDL 脚本严禁自带双分号或非标准注释，确保 `prepareSchema` 能将其正确转译为 PostgreSQL 等方言。
 
-## 5. 分区表安装规范 (Partitioned Table)
-
-### 5.1 建表原则
-
-> ⚠️ **严禁硬编码时间分区（如 `p2026Q1`–`p2026Q4`）。**
-
-所有 RANGE 分区表的 `install.php` 只写 `PARTITION pmax VALUES LESS THAN MAXVALUE`，未来分区由 `PartitionManager` 自动创建。
-
-```php
-// ✅ 正确：只写 pmax
-$sql = "CREATE TABLE `{$db->prefix}my_table` (
-    `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
-    `created_at` int(11) UNSIGNED NOT NULL DEFAULT '0',
-    PRIMARY KEY (`id`, `created_at`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-  PARTITION BY RANGE (`created_at`) (
-      PARTITION pmax VALUES LESS THAN MAXVALUE
-  );";
-
-// ❌ 错误：硬编码具体分区，每年都需要修改
-// PARTITION p2026Q1 VALUES LESS THAN (1775059200),
-// PARTITION p2026Q2 VALUES LESS THAN (1782835200),
-```
-
-### 5.2 注册与管理
-
-建表后调用 `PartitionManager::register()` 注册，卸载前调用 `unregister()`：
-
-```php
-use Framework\Database\Partition\{PartitionManager, PartitionConfig};
-
-// install.php — 建表后注册
-$pm = $this->container->get(PartitionManager::class);
-$pm->register(new PartitionConfig('my_table', 'created_at', 'quarter', 4, 8));
-
-// uninstall.php — 删表前注销
-$pm = $this->container->get(PartitionManager::class);
-$pm->unregister('my_table');
-$db->exec("DROP TABLE IF EXISTS `{$db->prefix}my_table`");
-```
-
-### 5.3 不需要做的事
-
-| 不要做 | 原因 |
-|-------|------|
-| 计算时间戳 `1775059200` | PartitionManager 自动算边界 |
-| 写 p2026Q1–p2026Q4 | 只写 `pmax` 就行 |
-| 每年更新 install.php | 永远不用改 |
-| 写 cron 脚本维护分区 | `PartitionMaintainJob` 自动处理 |
-| 各插件各自维护 | 统一由 PartitionManager 管 |
-
-## 6. 参考实现 (Reference Implementation)
+## 3. 参考实现 (Reference Implementation)
 
 * **标准安装脚本 (install.php)**：[well_forum/install.php](/plugins/well_forum/install.php)
 * **标准卸载脚本 (uninstall.php)**：[well_forum/uninstall.php](/plugins/well_forum/uninstall.php)
-* **分区管理器文档**：[Database_Standards.md §9](/skills/wellcms_development/references/Database_Standards.md#9-分区管理器-partitionmanager)

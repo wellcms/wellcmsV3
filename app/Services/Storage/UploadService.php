@@ -36,6 +36,8 @@ class UploadService
     private $container;
     /** @var array 配置对象或数组 */
     private $cfg;
+    /** @var string */
+    private $uploadNamespace = '';
 
     public function __construct(
         \Framework\Cache\Interfaces\CacheInterface $cache,
@@ -77,6 +79,16 @@ class UploadService
         $this->setState('language', $request->getAttribute(\App\Interfaces\LanguageLoaderInterface::class));
         $this->setState('session', $request->getAttribute(\Framework\Session\SessionInterface::class));
         $this->setState('ip', \Framework\Utils\IpHelper::ip($request->getServerParams()));
+        // 可选: 从 request param 读取 namespace
+        $ns = $request->getParsedBody()['namespace'] ?? '';
+        if ($ns !== '') {
+            $this->uploadNamespace = $ns;
+        }
+    }
+
+    public function setNamespace(string $namespace): void
+    {
+        $this->uploadNamespace = $namespace;
     }
 
     /**
@@ -260,7 +272,7 @@ class UploadService
 
         $chunkDir = $this->fs->chunkDir($uploadId);
         $safeFilename = $this->fs->safeFilename($filename);
-        $finalDir = $this->fs->dailyFinalTmpDir();
+        $finalDir = $this->fs->dailyFinalTmpDir($this->uploadNamespace);
         $finalPath = $finalDir . $safeFilename;
 
         // 确保目标目录存在
@@ -405,7 +417,7 @@ class UploadService
 
         // [关键修复] 落盘到正式临时目录，使用 moveTo 彻底清理原始临时文件
         $safeFilename = $this->fs->safeFilename($filename);
-        $finalDir = $this->fs->dailyFinalTmpDir();
+        $finalDir = $this->fs->dailyFinalTmpDir($this->uploadNamespace);
         $finalPath = $finalDir . $safeFilename;
 
         try {

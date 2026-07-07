@@ -94,6 +94,11 @@ class UploadController extends BaseController
      */
     public function init(\Framework\Http\Interfaces\ServerRequestInterface $request): ResponseInterface
     {
+        try {
+            $this->container->get(\App\Services\Storage\TempCleanupService::class)->maybeTriggerGC();
+        } catch (\Throwable $e) {
+            // 降级：不阻断上传流程
+        }
         $user = $request->getAttribute('user') ?? [];
 
         $result = $this->uploadService->init(

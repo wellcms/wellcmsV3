@@ -191,7 +191,13 @@
       "Read(//home/wellcms/.claude/skills/wellcms_development/**)",
       "Read(//home/wellcms/.claude/skills/**)",
       "WebFetch(domain:raw.githubusercontent.com)",
-      "Bash([ -f \"$CURR/Frontend/RedirectController.php\" ])"
+      "Bash([ -f \"$CURR/Frontend/RedirectController.php\" ])",
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(/usr/bin/grep -rn -E '->updateAvatar|->getCurrentUser|->tokenSet|->tokenClear|->incrementCredits|->incrementGolds|->format|->safe|->guest|->insert|->bulkInsert|->update|->bulkUpdate|->delete|->bulkDelete|->readByCache|->readByEmail|->readByUsername|->read\\\\\\(|->find\\\\\\(|->count\\\\\\(|->findByGid|->findPaged|->captureContext|->maxid\\\\\\(\\\\\\)' app/ plugins/ --include=\"*.php\")",
+      "Bash(ugrep -rn -e '->updateAvatar' -e '->getCurrentUser' -e '->tokenSet' -e '->tokenClear' -e '->incrementCredits' -e '->incrementGolds' -e '->format' -e '->safe' -e '->guest' -e '->insert' -e '->bulkInsert' -e '->update' -e '->bulkUpdate' -e '->delete' -e '->bulkDelete' -e '->readByCache' -e '->readByEmail' -e '->readByUsername' -e '->read\\(' -e '->find\\(' -e '->count\\(' -e '->findByGid' -e '->findPaged' -e '->captureContext' -e '->maxid\\(\\)' app/ plugins/ --include='*.php')",
+      "Bash(php-fpm -v)",
+      "Bash(dpkg -l)",
+      "Bash(php-fpm -i)"
     ]
   }
 }

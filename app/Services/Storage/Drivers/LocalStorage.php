@@ -34,7 +34,7 @@ class LocalStorage implements \App\Services\Storage\Interfaces\StorageInterface
         }
 
         // B. 关键点：检查路径是否是属于本项目的绝对路径
-        $appRoot = rtrim(str_replace(['\\', '/'], DIRECTORY_SEPARATOR, (defined('APP_PATH') ? APP_PATH : '')), DIRECTORY_SEPARATOR);
+        $appRoot = rtrim(str_replace(['\\', '/'], DIRECTORY_SEPARATOR, (\defined('APP_PATH') ? \APP_PATH : '')), DIRECTORY_SEPARATOR);
         if ($appRoot !== '' && strpos($path, $appRoot . DIRECTORY_SEPARATOR) === 0) {
             // 这是一条项目内的绝对路径。即使它没在当前 root 下，我们也不应该粗暴地给它加个 root 前缀。
             // 例如：root 是 /.../storage/upload，而 path 是 /.../storage/tmp

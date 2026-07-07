@@ -1,7 +1,7 @@
 # 常见陷阱与教训 (Common Pitfalls & Lessons)
 
 **文档位置**: `.agent/skills/wellcms_development/references/Common_Pitfalls.md`  
-**最后更新**: 2026-05-14
+**最后更新**: 2026-06-28
 
 ---
 
@@ -296,3 +296,159 @@ public function save($request): ResponseInterface
 - [ ] 控制器内无 `verifyCsrfToken()` 调用
 - [ ] 控制器内无 `RequestUtils::param('_csrf_token')` 手动读取
 - [ ] 模板表单/AJAX 中正确携带 `_csrf_token` 字段
+
+---
+
+## 教训 #8: 模板严禁拼接路由或 URL
+
+**背景**: WellCMS 3.0 的 `url_rewrite_on` 模式（`0/1/2/3`）会改变最终 URL 形态（如 `.html` 后缀、查询串格式）。若在模板（`views/htm/*.htm`）中拼接路由路径或查询字符串，生成的 URL 将与当前重写模式不一致，导致 404、SEO 断裂或转义缺口。**所有 URL 必须由控制器或服务层通过 `$this->urlGenerator->url()` 生成，以完整变量形式传入模板。**
+
+**错误模式** (严禁):
+```php
+// ❌ 错误 1：在模板中拼接路径段
+// manage_article_revisions.htm
+<a href="<?php echo htmlspecialchars((string)$compareAction . '/' . (int)$rev['id']);?>">
+
+// ❌ 错误 2：在模板中拼接查询字符串
+// article_detail.htm
+<a href="<?php echo htmlspecialchars((string)($category['slug'] ?? '') . '?tag=' . urlencode((string)($tag['slug'] ?? '')));?>">
+```
+
+**正确模式** (必须):
+```php
+// ✅ 控制器中生成完整 URL 数组
+private function buildRevisionViewUrls(int $articleId, int $createdAt, array $revisions = []): array
+{
+    $compareUrls = [];
+    foreach ($revisions as $rev) {
+        $revisionId = (int) ($rev['id'] ?? 0);
+        if ($revisionId <= 0) {
+            continue;
+        }
+        $compareUrls[$revisionId] = $this->urlGenerator->url(
+            'manage/article/Compare/' . $articleId . '/' . $createdAt . '/' . $revisionId
+        );
+    }
+
+    return [
+        'compare_urls' => $compareUrls,
+        // ...
+    ];
+}
+
+// ✅ 模板仅直接输出已封装好的 URL（URL 已由控制器生成，无需再次转义）
+<a href="<?php echo $compareUrls[(int)$rev['id']] ?? ''; ?>">对比</a>
+
+// ✅ 或使用视图对象的安全输出方法
+<a href="<?php echo $view->e('compare_urls.' . (int)$rev['id']); ?>">对比</a>
+```
+
+**关键认知**:
+- 模板是“绝对被动”的视图层，只负责渲染已由控制器/Service 准备好的数据
+- 查询参数同样必须通过 `$this->urlGenerator->url($route, ['tag' => $tagSlug])` 生成，禁止在模板中手动拼 `?key=value`
+- 路径段拼接会破坏铁律 #24（PascalCase 路由对齐方法名）的反向索引能力
+
+**检查清单**:
+- [ ] 模板中无 `$xxx . '/' . $id` 形式的路径拼接
+- [ ] 模板中无 `'?tag=' . urlencode(...)` 等查询字符串拼接
+- [ ] 所有链接/表单 action/data-href/data-action 均使用控制器传入的完整 URL 变量
+- [ ] 列表页、详情页、版本历史、对比页等高频模板重点复查
+
+---
+
+## 教训 #9: 模板输出严禁直接调用 `htmlspecialchars()`
+
+**背景**: WellCMS 3.0 视图层已提供统一的安全输出方法 `$view->e('key')`，内部使用 `htmlspecialchars(..., ENT_QUOTES, 'UTF-8')`。若模板中零散调用 `htmlspecialchars()`，会导致转义方式不一致（`ENT_COMPAT` vs `ENT_QUOTES`、编码参数遗漏）、代码冗余，且容易遗漏局部变量抽取路径。**所有模板输出必须通过 `$view->e()` 或 `$view->raw()`，禁止自行调用底层转义函数。**
+
+**错误模式** (严禁):
+```php
+// ❌ 错误 1：直接调用 htmlspecialchars
+<a href="<?php echo htmlspecialchars((string)$compareAction);?>">
+<?php echo htmlspecialchars((string)($article['title'] ?? '')); ?>
+
+// ❌ 错误 2：把需要转义的数据抽到本地变量后再手动转义
+$article = $view->get('article');
+<?php echo htmlspecialchars((string)($article['title'] ?? '')); ?>
+```
+
+**正确模式** (必须):
+```php
+// ✅ 通过视图对象的安全输出方法输出
+<?php echo $view->e('article.title'); ?>
+
+// ✅ 原始数据仅用于遍历/判断，不直接输出
+<?php $article = $view->raw('article', []); ?>
+<?php if (!empty($article['tags'])) { foreach ($article['tags'] as $tag) { ?>
+    <span><?php echo $view->e('tag.name'); ?></span>
+<?php } } ?>
+
+// ✅ 本地变量只允许存放已由控制器预封装、无需转义的值（如 URL、数字 ID）
+<?php $rollbackAction = $view->get('rollback_action'); ?>
+<button data-href="<?php echo $rollbackAction; ?>">回滚</button>
+```
+
+**关键认知**:
+- `$view->e()` 自动处理 `ENT_QUOTES` 和 `UTF-8`，统一转义策略
+- 需要转义的数据应保留在 `$view` 数据池中，通过键路径访问，而不是抽取到本地变量再手动转义
+- 局部变量只用于逻辑判断、遍历或输出已确认安全的值
+
+**检查清单**:
+- [ ] 模板中无 `htmlspecialchars(`、`htmlentities(` 调用
+- [ ] 输出文本/属性值优先使用 `$view->e('key.subkey')`
+- [ ] 遍历或判断使用 `$view->raw('key', $default)`
+- [ ] 本地变量仅存放 URL、ID、布尔等无需转义的预封装值
+
+---
+
+## 教训 #10: 模板严禁自定义 JS 与内联事件处理器
+
+**背景**: 前端交互的唯一标准库是 `app/views/js/main.js`（`window.wellcms`）。在模板中编写自定义 `<script>`、内联 `onclick`、自行封装 `fetch`/`XMLHttpRequest` 会破坏交互一致性，导致暗模式、Toast、弹窗、错误处理等行为与主程序脱节，且难以维护。**所有交互必须使用声明式属性或 `wellcms.*` API。**
+
+**错误模式** (严禁):
+```php
+// ❌ 错误 1：内联 onclick + 原生 confirm
+<button onclick="return confirm('<?php echo $view->get('language.delete_confirm');?>')">删除</button>
+
+// ❌ 错误 2：模板内自定义 <script> 块
+<script>
+    document.getElementById('btn').addEventListener('click', function() {
+        fetch('/api/delete', { method: 'POST' });
+    });
+</script>
+
+// ❌ 错误 3：自行拼接 JS URL 或硬编码 PHP 到 JS
+<script>
+    const url = '<?php echo $action; ?>';
+</script>
+```
+
+**正确模式** (必须):
+```php
+// ✅ 声明式交互（推荐）
+<button class="ajax-post"
+        data-href="<?php echo $rollbackAction; ?>"
+        data-confirm="<?php echo $view->e('language.well_article_revision_rollback_confirm'); ?>"
+        data-arg='<?php echo json_encode($rollbackArgs, JSON_HEX_APOS | JSON_UNESCAPED_UNICODE); ?>'>
+    回滚
+</button>
+
+// ✅ 迫不得已需要 JS 时，必须使用 wellcms API，且严禁在 JS 中硬编码 PHP
+<script>
+    wellcms.confirm('<?php echo $view->e('language.delete_confirm'); ?>', function() {
+        wellcms.post('<?php echo $view->e('action'); ?>', { id: 1 });
+    });
+</script>
+```
+
+**关键认知**:
+- `GlobalClickHandler` / `GlobalFormHandler` 已覆盖 99% 的交互场景
+- `onclick` / `onchange` / `onsubmit` 等内联事件处理器一律禁用
+- 任何 JS 中的动态值都必须通过 `wellcms` 数据属性或 `$view->e()` 注入，严禁在 JS 中直接写 PHP 变量
+
+**检查清单**:
+- [ ] 模板中无 `<script>` 块（除非使用 `wellcms.*` API）
+- [ ] 模板中无 `onclick=`、`onchange=`、`onsubmit=` 等内联事件
+- [ ] 无自定义 `fetch` / `XMLHttpRequest` / `$.ajax`
+- [ ] JS 中无硬编码 PHP 变量或路由字符串
+- [ ] 所有确认弹窗使用 `data-confirm` 或 `wellcms.confirm()`
+- [ ] 所有 AJAX 交互使用 `ajax-get` / `ajax-post` / `ajax-form` 或 `wellcms.get()` / `wellcms.post()`

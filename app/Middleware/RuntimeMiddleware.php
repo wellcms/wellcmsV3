@@ -227,6 +227,11 @@ class RuntimeMiddleware implements \Framework\Http\Interfaces\MiddlewareInterfac
 
             return $handler->handle($request);
         } catch (\Throwable $e) {
+            // 路由未命中属于正常 HTTP 语义，不应由 Runtime 层接管
+            if ($e instanceof \Framework\Exception\Http\NotFoundException) {
+                throw $e;
+            }
+
             // 404 异常不作为系统级 Error 记录，减少噪音
             if (!($e instanceof \Framework\Exception\Http\NotFoundException)) {
                 $logger = $this->container->get(\Framework\Logger\LoggerInterface::class);
@@ -234,7 +239,7 @@ class RuntimeMiddleware implements \Framework\Http\Interfaces\MiddlewareInterfac
             }
 
             // 如果是 DEBUG 模式，就把异常抛出来，方便前端看到
-            if (defined('DEBUG') && DEBUG >= 2) throw $e;
+            if (\defined('DEBUG') && \DEBUG >= 2) throw $e;
 
             // 这里你可以写日志，也可以直接返回错误提示
             $messageController = $this->container->get(\App\Controllers\Base\MessageController::class);

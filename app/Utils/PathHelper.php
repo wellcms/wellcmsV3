@@ -13,11 +13,11 @@ class PathHelper
      */
     public static function relative(string $absolutePath): string
     {
-        if (!defined('APP_PATH') || APP_PATH === '') {
+        if (!\defined('APP_PATH') || \APP_PATH === '') {
             return $absolutePath;
         }
 
-        $base = rtrim(str_replace('\\', '/', APP_PATH), '/');
+        $base = rtrim(str_replace('\\', '/', \APP_PATH), '/');
         $path = str_replace('\\', '/', $absolutePath);
 
         // 将编译缓存路径还原为源码路径
@@ -52,7 +52,7 @@ class PathHelper
      */
     public static function relativeTraceAsString(\Throwable $e): string
     {
-        $appPath = defined('APP_PATH') ? rtrim(str_replace('\\', '/', APP_PATH), '/') : '';
+        $appPath = defined('APP_PATH') ? rtrim(str_replace('\\', '/', \APP_PATH), '/') : '';
         if ($appPath === '') {
             return $e->getTraceAsString();
         }

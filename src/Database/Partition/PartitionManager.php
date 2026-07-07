@@ -61,6 +61,9 @@ class PartitionManager
     /** @var string 表前缀，如 'well_' */
     private $prefix;
 
+    /** @var PartitionDialectInterface */
+    private $dialect;
+
     /** @var string 缓存锁 Key */
     const LOCK_KEY = 'ddl:partition:maintain';
 
@@ -68,12 +71,13 @@ class PartitionManager
     const LAST_RUN_KEY = 'partition:last_maintain_at';
 
     /**
-     * @param PartitionRegistry $registry
-     * @param DatabaseInterface $db
-     * @param CacheInterface    $cache
-     * @param LoggerInterface   $logger
-     * @param object|null       $taskManage 可选的 TaskManage 实例
-     * @param string            $prefix     表前缀
+     * @param PartitionRegistry              $registry
+     * @param DatabaseInterface              $db
+     * @param CacheInterface                 $cache
+     * @param LoggerInterface                $logger
+     * @param object|null                    $taskManage 可选的 TaskManage 实例
+     * @param string                         $prefix     表前缀
+     * @param PartitionDialectInterface|null $dialect    分区方言（null 时自动检测）
      */
     public function __construct(
         PartitionRegistry $registry,
@@ -81,7 +85,8 @@ class PartitionManager
         CacheInterface $cache,
         LoggerInterface $logger,
         $taskManage = null,
-        string $prefix = ''
+        string $prefix = '',
+        ?PartitionDialectInterface $dialect = null
     ) {
         $this->registry = $registry;
         $this->db = $db;
@@ -89,6 +94,8 @@ class PartitionManager
         $this->logger = $logger;
         $this->taskManage = $taskManage;
         $this->prefix = $prefix;
+        // 容器注入优先；null 时工厂自动检测（开发/测试兜底）
+        $this->dialect = $dialect ?? PartitionDialectFactory::createFromConnection($db);
     }
 
     /**
@@ -98,7 +105,7 @@ class PartitionManager
      */
     public static function isSwoole(): bool
     {
-        return defined('SWOOLE_VERSION') && extension_loaded('swoole');
+        return \defined('SWOOLE_VERSION') && \extension_loaded('swoole');
     }
 
     // ---------------------------------------------------------------
@@ -168,8 +175,9 @@ class PartitionManager
             // 获取专用连接，所有 DDL 使用同一连接
             $pdo = $this->db->createFreshConnection('master');
             // §11.2 DDL 超时保护：防止 DDL 无限阻塞业务查询
-            $pdo->exec("SET SESSION lock_wait_timeout = 10");
-            $pdo->exec("SET SESSION innodb_lock_wait_timeout = 10");
+            foreach ($this->dialect->compileSessionSetup() as $sql) {
+                $pdo->exec($sql);
+            }
 
             $this->logger->info('PartitionMaintain started', array(
                 'dry_run' => $dryRun,
@@ -248,6 +256,10 @@ class PartitionManager
         $pdo = null;
         try {
             $pdo = $this->db->createFreshConnection('master');
+            // §11.2 DDL 超时保护：防止 DDL 无限阻塞业务查询
+            foreach ($this->dialect->compileSessionSetup() as $sql) {
+                $pdo->exec($sql);
+            }
             $result->tablesScanned = 1;
             $this->maintainOneTable($pdo, $config, $dryRun, $result);
         } catch (\Throwable $e) {
@@ -422,25 +434,41 @@ class PartitionManager
         $now = time();
         $expectedBoundary = $this->calculateBoundaryAfterAdvance($now, $config);
 
-        // 防御：无数据分区时 maxBoundary=0，锚定到保留期边界，禁止从 epoch(1970) 创建
-        if ($maxBoundary === 0 && $config->retention > 0) {
-            $anchor = PartitionPeriod::ago($now, $config->period, $config->retention);
+        // 防御：无数据分区或已有分区远在保留期外时，锚定到合理起始边界。
+        // 条件：maxBoundary=0（无数据分区）或 maxBoundary 比当前保留期的分区还老
+        // 场景：修复后首次运行发现 p2005Q4 这样的历史遗留分区时，强制锚定到当前起算点
+        if ($maxBoundary === 0) {
+            $periods = $config->retention > 0 ? $config->retention : 8;
+            $anchor = PartitionPeriod::ago($now, $config->period, $periods);
             if ($anchor > 0) {
                 $maxBoundary = $anchor;
+            }
+        } else {
+            // 已有遗留分区时（如从历史错误中恢复），确保 maxBoundary 不低于保留期边界
+            $lifeAnchor = $config->retention > 0
+                ? PartitionPeriod::ago($now, $config->period, $config->retention)
+                : PartitionPeriod::ago($now, $config->period, 8);
+            if ($lifeAnchor > 0 && $maxBoundary < $lifeAnchor) {
+                $this->logger->info('PartitionMaintain: boundary lifted from legacy partition', array(
+                    'table'       => $fullTableName,
+                    'previous'    => $maxBoundary,
+                    'corrected'   => $lifeAnchor,
+                ));
+                $maxBoundary = $lifeAnchor;
             }
         }
 
         // §11.4 熔断：记录处理前的错误数，用于判断本次操作是否新增错误
         $errorsBefore = $result->errors;
 
+        // 4. 先删除过期分区（为后续创建释放分区槽位，防止 legacy 分区过多导致 MySQL 1499）
+        if ($config->retention > 0) {
+            $this->dropExpiredPartitions($pdo, $fullTableName, $config, $now, $dryRun, $result);
+        }
+
         // 如果 maxBoundary 已达到预期边界，跳过创建
         if ($maxBoundary < $expectedBoundary) {
             $this->createFuturePartitions($pdo, $fullTableName, $config, $maxBoundary, $expectedBoundary, $dryRun, $result);
-        }
-
-        // 4. 删除超过保留期的分区
-        if ($config->retention > 0) {
-            $this->dropExpiredPartitions($pdo, $fullTableName, $config, $now, $dryRun, $result);
         }
 
         // §11.4 熔断：更新连续失败计数
@@ -470,42 +498,76 @@ class PartitionManager
      */
     private function fetchPartitions(\PDO $pdo, string $fullTableName): array
     {
-        $dbName = $this->fetchDatabaseName($pdo);
-        // PDO::ATTR_CASE => CASE_LOWER 强制列名小写，information_schema 也返回小写键名
-        $sql = "SELECT PARTITION_NAME, PARTITION_DESCRIPTION, PARTITION_ORDINAL_POSITION
-                FROM information_schema.PARTITIONS
-                WHERE TABLE_SCHEMA = " . $pdo->quote($dbName) . "
-                  AND TABLE_NAME = " . $pdo->quote($fullTableName) . "
-                  AND PARTITION_NAME IS NOT NULL
-                  AND SUBPARTITION_NAME IS NULL
-                ORDER BY PARTITION_ORDINAL_POSITION ASC";
+        try {
+            $sql = $this->dialect->compilePartitionsQuery($fullTableName);
+            $stmt = $pdo->query($sql);
+            $rows = $stmt->fetchAll(\PDO::FETCH_ASSOC);
 
-        $stmt = $pdo->query($sql);
-        $rows = $stmt->fetchAll(\PDO::FETCH_ASSOC);
-
-        $result = array();
-        foreach ($rows as $row) {
-            $result[] = array(
-                'name'        => $row['partition_name'],
-                'description' => $row['partition_description'],
-                'position'    => (int)$row['partition_ordinal_position'],
-            );
+            $result = array();
+            foreach ($rows as $row) {
+                $result[] = array(
+                    'name'        => $row['partition_name'],
+                    'description' => $this->normalizePartitionDescription(
+                        $row['partition_description']
+                    ),
+                    'position'    => (int)$row['partition_ordinal_position'],
+                );
+            }
+            return $result;
+        } catch (\Throwable $e) {
+            // 单表查询失败不应中断全局维护
+            $this->logger->warning('PartitionMaintain: failed to query partitions', array(
+                'table' => $fullTableName,
+                'error' => $e->getMessage(),
+            ));
+            return array();
         }
-
-        return $result;
     }
 
     /**
-     * 获取当前数据库名。
+     * 归一化分区边界描述。
+     * MySQL: 数值（如 '1735689600'）或 'MAXVALUE'
+     * PgSQL: 'FOR VALUES FROM (1735689600) TO (1743465600)' → 提取 TO 的值
+     *        'DEFAULT' → 'MAXVALUE'
      *
-     * @param \PDO $pdo
+     * @param string $raw
      * @return string
      */
-    private function fetchDatabaseName(\PDO $pdo): string
+    private function normalizePartitionDescription(string $raw): string
     {
-        $stmt = $pdo->query("SELECT DATABASE()");
-        $name = $stmt->fetchColumn();
-        return $name !== false ? (string)$name : '';
+        $upper = strtoupper(trim($raw));
+
+        // 纯数值或 MAXVALUE（MySQL 标准格式）
+        if (is_numeric($upper) || $upper === 'MAXVALUE') {
+            return $upper;
+        }
+
+        // PG: 'FOR VALUES FROM (X) TO (Y)' → 取 TO 后的值
+        if (preg_match('/TO\s*\((\d+)\)/i', $raw, $m)) {
+            return $m[1];
+        }
+
+        // PG DEFAULT
+        if (stripos($raw, 'DEFAULT') !== false) {
+            return 'MAXVALUE';
+        }
+
+        return $raw;
+    }
+
+    /**
+     * 从带前缀的完整表名中去除前缀，返回纯表名。
+     * 用于构造 PG 分区子表名。
+     *
+     * @param string $fullTableName
+     * @return string
+     */
+    private function stripPrefix(string $fullTableName): string
+    {
+        if ($this->prefix !== '' && strncmp($fullTableName, $this->prefix, strlen($this->prefix)) === 0) {
+            return substr($fullTableName, strlen($this->prefix));
+        }
+        return $fullTableName;
     }
 
     /**
@@ -549,6 +611,7 @@ class PartitionManager
         $boundary = $currentMaxBoundary;
         $safetyLimit = max($config->advanceCount * 4, 16);
         $created = 0;
+
         while ($boundary < $expectedBoundary) {
             if (++$created > $safetyLimit) {
                 $this->logger->error('PartitionMaintain safety limit exceeded', array(
@@ -566,37 +629,72 @@ class PartitionManager
                 break;
             }
 
-            $partitionName = PartitionPeriod::formatName($nextBoundary, $config->period);
-            $sql = $this->buildCreatePartitionSql($fullTableName, $config, $partitionName, $nextBoundary);
+            // 构造分区名：
+            //   MySQL: 仅使用周期后缀（如 'p2026Q4'），保持与旧版本一致
+            //   PG:    纯表名 + 周期后缀（如 'forum_reply_p2026Q4'），
+            //          与 PgSqlGrammar::prepareSchema() 建表阶段命名一致
+            if ($this->dialect->supportsTransactionalDdl()) {
+                $pureTable = $this->stripPrefix($fullTableName);
+                $partitionName = $pureTable . '_' . PartitionPeriod::formatName(
+                    $nextBoundary,
+                    $config->period
+                );
+            } else {
+                $partitionName = PartitionPeriod::formatName(
+                    $nextBoundary,
+                    $config->period
+                );
+            }
 
-            if ($dryRun) {
-                $this->logger->info('PartitionMaintain [DRY-RUN] would create', array(
+            $sqls = $this->dialect->compileCreatePartition(
+                $fullTableName,
+                $boundary,          // prevBoundary
+                $partitionName,
+                $nextBoundary,      // boundary
+                $config
+            );
+
+            // PG 支持事务性 DDL，将同一分区的多条 SQL 包裹在事务中
+            if ($this->dialect->supportsTransactionalDdl() && count($sqls) > 1) {
+                $pdo->beginTransaction();
+            }
+
+            try {
+                foreach ($sqls as $sql) {
+                    if ($dryRun) {
+                        $this->logger->info('PartitionMaintain [DRY-RUN] would create', array(
+                            'table' => $fullTableName,
+                            'sql'   => $sql,
+                        ));
+                    } else {
+                        $pdo->exec($sql);
+                    }
+                }
+                if ($this->dialect->supportsTransactionalDdl() && count($sqls) > 1) {
+                    $pdo->commit();
+                }
+                $this->logger->info('PartitionMaintain created', array(
                     'table'     => $fullTableName,
                     'partition' => $partitionName,
-                    'sql'       => $sql,
                 ));
-            } else {
-                try {
-                    $pdo->exec($sql);
-                    $this->logger->info('PartitionMaintain created', array(
-                        'table'     => $fullTableName,
-                        'partition' => $partitionName,
-                    ));
-                } catch (\Throwable $e) {
-                    $result->errors++;
-                    $result->errorDetails[] = array(
-                        'table' => $fullTableName,
-                        'sql'   => $sql,
-                        'error' => $e->getMessage(),
-                    );
-                    $this->logger->error('PartitionMaintain create failed', array(
-                        'table'     => $fullTableName,
-                        'partition' => $partitionName,
-                        'error'     => $e->getMessage(),
-                    ));
-                    // 单表失败中断后续分区创建
-                    break;
+            } catch (\Throwable $e) {
+                if ($this->dialect->supportsTransactionalDdl()
+                    && count($sqls) > 1
+                    && $pdo->inTransaction()
+                ) {
+                    $pdo->rollBack();
                 }
+                $result->errors++;
+                $result->errorDetails[] = array(
+                    'table' => $fullTableName,
+                    'error' => $e->getMessage(),
+                );
+                $this->logger->error('PartitionMaintain create failed', array(
+                    'table'     => $fullTableName,
+                    'partition' => $partitionName,
+                    'error'     => $e->getMessage(),
+                ));
+                break;
             }
 
             $result->partitionsCreated++;
@@ -658,40 +756,49 @@ class PartitionManager
             array_pop($toDrop);
         }
 
-        // 拼接 DROP PARTITION SQL
-        $dropNames = array();
-        foreach ($toDrop as $name) {
-            $dropNames[] = '`' . str_replace('`', '``', $name) . '`';
-        }
-
-        $sql = sprintf(
-            'ALTER TABLE `%s` DROP PARTITION %s',
-            str_replace('`', '``', $fullTableName),
-            implode(', ', $dropNames)
-        );
-
-        if ($dryRun) {
-            $this->logger->info('PartitionMaintain [DRY-RUN] would drop', array(
-                'table'      => $fullTableName,
-                'partitions' => $toDrop,
-                'sql'        => $sql,
-            ));
-            $result->partitionsDropped += count($toDrop);
+        // 防御后可能清空（只剩 1 个分区被保留），不再执行 DROP
+        if (empty($toDrop)) {
             return;
         }
 
+        $sqls = $this->dialect->compileDropPartitions($fullTableName, $toDrop);
+
+        // PG 支持事务性 DDL
+        if ($this->dialect->supportsTransactionalDdl() && count($sqls) > 1) {
+            $pdo->beginTransaction();
+        }
+
         try {
-            $pdo->exec($sql);
+            foreach ($sqls as $sql) {
+                if ($dryRun) {
+                    $this->logger->info('PartitionMaintain [DRY-RUN] would drop', array(
+                        'table' => $fullTableName,
+                        'sql'   => $sql,
+                    ));
+                } else {
+                    $pdo->exec($sql);
+                }
+            }
+            if ($this->dialect->supportsTransactionalDdl() && count($sqls) > 1) {
+                $pdo->commit();
+            }
             $this->logger->info('PartitionMaintain dropped', array(
                 'table'      => $fullTableName,
                 'partitions' => $toDrop,
             ));
             $result->partitionsDropped += count($toDrop);
+            // 注意：PG 下 $toDrop 是逻辑分区数，SQL 条数可能不同。
+            // partitionsDropped 以逻辑分区数为准，不重复计数。
         } catch (\Throwable $e) {
+            if ($this->dialect->supportsTransactionalDdl()
+                && count($sqls) > 1
+                && $pdo->inTransaction()
+            ) {
+                $pdo->rollBack();
+            }
             $result->errors++;
             $result->errorDetails[] = array(
                 'table' => $fullTableName,
-                'sql'   => $sql,
                 'error' => $e->getMessage(),
             );
             $this->logger->error('PartitionMaintain drop failed', array(
@@ -699,69 +806,6 @@ class PartitionManager
                 'error' => $e->getMessage(),
             ));
         }
-    }
-
-    /**
-     * 构建 REORGANIZE PARTITION pmax 的 SQL。
-     *
-     * @param string          $fullTableName  带前缀表名
-     * @param PartitionConfig $config
-     * @param string          $partitionName  新分区名（如 p2027Q1）
-     * @param int             $boundary       新分区边界时间戳
-     * @return string
-     */
-    private function buildCreatePartitionSql(
-        string $fullTableName,
-        PartitionConfig $config,
-        string $partitionName,
-        int $boundary
-    ): string {
-        $safeTable = '`' . str_replace('`', '``', $fullTableName) . '`';
-
-        if ($config->subPartitions > 0) {
-            // 复合分区：需要为每个新分区定义子分区
-            $newSubs = $this->buildSubpartitionDefs($partitionName, $config->subPartitions);
-            $pmaxSubs = $this->buildSubpartitionDefs('pmax', $config->subPartitions);
-
-            return sprintf(
-                'ALTER TABLE %s REORGANIZE PARTITION pmax INTO ('
-                . 'PARTITION `%s` VALUES LESS THAN (%d) (%s), '
-                . 'PARTITION pmax VALUES LESS THAN MAXVALUE (%s)'
-                . ')',
-                $safeTable,
-                $partitionName,
-                $boundary,
-                $newSubs,
-                $pmaxSubs
-            );
-        }
-
-        // 简单 RANGE 分区
-        return sprintf(
-            'ALTER TABLE %s REORGANIZE PARTITION pmax INTO ('
-            . 'PARTITION `%s` VALUES LESS THAN (%d), '
-            . 'PARTITION pmax VALUES LESS THAN MAXVALUE'
-            . ')',
-            $safeTable,
-            $partitionName,
-            $boundary
-        );
-    }
-
-    /**
-     * 构建子分区定义字符串。
-     *
-     * @param string $parentName  父分区名
-     * @param int    $subCount    子分区数
-     * @return string 如 "SUBPARTITION p2027Q1_sp0, SUBPARTITION p2027Q1_sp1, ..."
-     */
-    private function buildSubpartitionDefs(string $parentName, int $subCount): string
-    {
-        $parts = array();
-        for ($i = 0; $i < $subCount; $i++) {
-            $parts[] = sprintf('SUBPARTITION `%s_sp%d`', $parentName, $i);
-        }
-        return implode(', ', $parts);
     }
 
     /**

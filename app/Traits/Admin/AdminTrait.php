@@ -124,6 +124,11 @@ trait AdminTrait
                     'name' => $this->language->get('cache'),
                     'url' => $this->urlGenerator->url('admin/other/clearCache')
                 ],
+                'TempCleanup' => [
+                    'child' => 'temp_cleanup',
+                    'name' => $this->language->get('temp_cleanup_menu'),
+                    'url' => $this->urlGenerator->url('admin/TempCleanup')
+                ],
                 'PartitionStatus' => [
                     'child' => 'partition',
                     'name' => $this->language->get('partition_management'),

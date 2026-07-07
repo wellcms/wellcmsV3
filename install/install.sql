@@ -1,6 +1,6 @@
 -- Data table structure
 
--- ALTER DATABASE `wellcms` CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+-- ALTER DATABASE `wellcms` charACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
 DROP TABLE IF EXISTS `well_user`;
 CREATE TABLE `well_user` (
@@ -40,7 +40,7 @@ CREATE TABLE `well_user` (
   UNIQUE KEY `idx_user_username` (`username`),
   KEY `idx_user_group` (`group_id`,`id`),
   KEY `idx_user_ip` (`create_ip`,`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT charSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 用户组
 -- 用户权限：阅读、发帖、回复、编辑、删除、上传、下载、审核、创建tag；
@@ -100,7 +100,7 @@ CREATE TABLE `well_group` (
   `direct_reply` tinyint(1) UNSIGNED NOT NULL DEFAULT '0', -- 0需要审核，1直接发布回复
   `smtp` tinyint(1) UNSIGNED NOT NULL DEFAULT '0',  -- 1设置STMP
   `task` tinyint(1) UNSIGNED NOT NULL DEFAULT '0'  -- 定时任务 1有权限
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT charSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 ALTER TABLE `well_group` ADD PRIMARY KEY (`id`);
 ALTER TABLE `well_group` MODIFY `id` smallint(6) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=110;
@@ -144,7 +144,7 @@ CREATE TABLE `well_session` (
   KEY `idx_ses_ip` (`ip`, `updated_at`),
   KEY `idx_ses_updated` (`updated_at`),
   KEY `idx_ses_user` (`user_id`, `updated_at`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT charSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 DROP TABLE IF EXISTS `well_session_data`;
 CREATE TABLE `well_session_data` (
@@ -152,7 +152,7 @@ CREATE TABLE `well_session_data` (
   `updated_at` int(11) UNSIGNED NOT NULL DEFAULT '0',	-- 最后活跃时间
   `data` text COLLATE utf8mb4_unicode_ci NOT NULL, -- 超大数据
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT charSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 DROP TABLE IF EXISTS `well_ip_list`;
 CREATE TABLE `well_ip_list` (
@@ -165,7 +165,7 @@ CREATE TABLE `well_ip_list` (
   `created_at` int(11) UNSIGNED NOT NULL DEFAULT '0',
   PRIMARY KEY (`id`),
   UNIQUE KEY `idx_ip` (`ip`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT charSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 持久的 key value 数据存储, ttserver, mysql
 DROP TABLE IF EXISTS `well_kv`;
@@ -174,7 +174,7 @@ CREATE TABLE `well_kv` (
   `value` mediumtext COLLATE utf8mb4_unicode_ci NOT NULL,
   # `expiry` int(11) UNSIGNED NOT NULL default '0',		-- 过期时间
   PRIMARY KEY(`key`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT charSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 INSERT INTO `well_kv` (`key`, `value`) VALUES ('setting', '{"config":{"name":"WellCMS","version":"3.0.0","official_version":"3.0.0","last_version":"0","version_date":"0","upgrade":"0","installed":0},"picture_size":{"width":400,"height":280},"setting":{"review_threads":0,"review_comments":0,"thumbnail_on":1,"save_image_on":1},"shield":[],"pinned_home":[],"pinned_global":[],"themes":{"theme":"","children":[]}}');
 
 -- 缓存表 用来保存临时数据
@@ -185,7 +185,7 @@ CREATE TABLE `well_cache` (
   `updated_at` int(11) UNSIGNED NOT NULL DEFAULT '0', -- 最后更新时间戳
   `expiry` int(11) UNSIGNED NOT NULL DEFAULT '0',		-- 过期时间
   PRIMARY KEY(`key`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT charSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 DROP TABLE IF EXISTS `well_log`;
 CREATE TABLE `well_log` (
@@ -205,7 +205,7 @@ CREATE TABLE `well_log` (
   KEY `idx_log_from_user` (`from_user_id`,`id`),
   KEY `idx_log_user` (`user_id`,`id`),
   KEY `idx_log_target` (`target_id`,`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT charSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 回收删除数据 附件图片只有在彻底删除时才进行清理
 DROP TABLE IF EXISTS `well_recycle`;
@@ -218,7 +218,7 @@ CREATE TABLE `well_recycle` (
   `content` longtext COLLATE utf8mb4_unicode_ci NOT NULL, -- 被删除表的数据直接JSON格式储存，方便恢复
   PRIMARY KEY (`id`),
   KEY `idx_rec_user` (`user_id`,`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT charSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 导航表
 DROP TABLE IF EXISTS `well_navigation`;
@@ -234,7 +234,7 @@ CREATE TABLE `well_navigation` (
   `name` varchar(48) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '',
   `url` varchar(120) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '',
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT charSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 用户临时操作内容记录表，比如未提交的内容，上传文件，删除文件等操作记录
 DROP TABLE IF EXISTS `well_temp_content`;
@@ -248,7 +248,7 @@ CREATE TABLE `well_temp_content` (
   `create_ip` varbinary(16) NOT NULL DEFAULT '',
   PRIMARY KEY (`id`),
   KEY `idx_tmpcon_user` (`user_id`,`created_at`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT charSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 文件存储表，保存所有上传文件的唯一信息，用于附件表的关联和去重
 DROP TABLE IF EXISTS `well_file_storage`;
@@ -280,7 +280,7 @@ CREATE TABLE `well_file_storage` (
   `filetype` varchar(7) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '',  -- 文件类型
   `comment` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '', -- 文件注释
   -- 新增
-  `review_note` VARCHAR(255) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '', -- 审核备注
+  `review_note` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '', -- 审核备注
   `exif_data` TEXT COLLATE utf8mb4_unicode_ci, -- 图片EXIF信息JSON格式
 
   PRIMARY KEY (`id`),
@@ -289,7 +289,7 @@ CREATE TABLE `well_file_storage` (
 
   -- 审核状态索引（加速审核查询）
   KEY `idx_review_status` (`is_reviewed`, `id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT charSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 DROP TABLE IF EXISTS `well_attachment`;
 CREATE TABLE `well_attachment` (
@@ -324,4 +324,36 @@ CREATE TABLE `well_attachment` (
 
   -- 时间维度：后台统计、归档查询
   -- KEY `idx_created` (`created_at`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT charSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- -----------------------------------------------------------
+-- Scheduler: 调度任务持久化表（v3.2 新增）
+-- -----------------------------------------------------------
+DROP TABLE IF EXISTS `well_scheduler_tasks`;
+CREATE TABLE `well_scheduler_tasks` (
+    `id` BINARY(16) NOT NULL COMMENT 'UUIDv7',
+    `class_name` varchar(120)  NOT NULL COMMENT 'Job 类全名',
+    `method_name` char(64) NOT NULL DEFAULT 'handle' COMMENT '执行方法',
+    `args` TEXT COLLATE utf8mb4_unicode_ci, -- 参数 (JSON)
+    `priority` tinyint(1) UNSIGNED NOT NULL DEFAULT '5' COMMENT '优先级 0-10',
+    `max_retries` tinyint(1) UNSIGNED NOT NULL DEFAULT '0' COMMENT '最大重试次数',
+    `retry_delay` int(11) UNSIGNED NOT NULL DEFAULT '0' COMMENT '重试延迟秒数',
+    `timeout` int(11) UNSIGNED NOT NULL DEFAULT '0' COMMENT '执行超时秒数',
+    `callback_url` varchar(160) NULL COMMENT '回调 URL',
+    `callback_method` tinyint(1) UNSIGNED NOT NULL DEFAULT '0' COMMENT '回调方法 0:POST 1:GET',
+    `retry_count` tinyint(1) UNSIGNED NOT NULL DEFAULT '0' COMMENT '已重试次数',
+    `status` tinyint(1) UNSIGNED NOT NULL DEFAULT '0' COMMENT '任务状态 0:pending 1:retrying 2:running 3:success 4:failed 5:cancelled',
+    `dedupe_key` char(120) NULL, -- 去重键 (NULL=不去重，允许多个 NULL)
+    `error` TEXT NULL COMMENT '错误信息',
+    `created_at` int(11) UNSIGNED NOT NULL DEFAULT '0' COMMENT '创建时间戳',
+    `updated_at` int(11) UNSIGNED NOT NULL DEFAULT '0' COMMENT '更新时间戳',
+    `scheduled_at` int(11) UNSIGNED NOT NULL DEFAULT '0' COMMENT '计划执行时间戳',
+    `started_at` int(11) UNSIGNED NOT NULL DEFAULT '0' COMMENT '开始执行时间戳',
+    `completed_at` int(11) UNSIGNED NOT NULL DEFAULT '0' COMMENT '完成时间戳',
+    `heartbeat_at` int(11) UNSIGNED NOT NULL DEFAULT '0' COMMENT 'Worker 最后心跳时间戳',
+    PRIMARY KEY (`id`),
+    INDEX `idx_status_scheduled` (`status`, `scheduled_at`),
+    UNIQUE INDEX `idx_dedupe_key` (`dedupe_key`),
+    INDEX `idx_heartbeat` (`heartbeat_at`),
+    INDEX `idx_created_at` (`created_at`)
+) ENGINE=InnoDB DEFAULT charSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

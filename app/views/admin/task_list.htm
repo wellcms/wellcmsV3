@@ -62,10 +62,10 @@
 						<?php echo $view->get('language.class_name'); ?></th>
 					<th class="px-6 py-4 font-semibold text-gray-600 dark:text-gray-300">
 						<?php echo $view->get('language.status'); ?></th>
-					<th class="px-6 py-4 font-semibold text-gray-600 dark:text-gray-300">
+					<th class="px-6 py-4 font-semibold text-gray-600 dark:text-gray-300 whitespace-nowrap">
 						<?php echo $view->get('language.priority'); ?></th>
-					<th class="px-6 py-4 font-semibold text-gray-600 dark:text-gray-300">
-						<?php echo $view->get('language.retry_count'); ?></th>
+					<th class="px-6 py-4 font-semibold text-gray-600 dark:text-gray-300 whitespace-nowrap">
+						<?php echo $view->get('language.retry'); ?></th>
 					<th class="px-6 py-4 font-semibold text-gray-600 dark:text-gray-300">
 						<?php echo $view->get('language.created_at'); ?></th>
 					<th class="px-6 py-4 font-semibold text-gray-600 dark:text-gray-300 text-right">
@@ -74,37 +74,37 @@
 			</thead>
 			<tbody class="divide-y divide-gray-200 dark:divide-gray-700 task-list">
 				<?php if ($itemList) { foreach($itemList as $key => $item) { ?>
-				<tr id="<?php echo $item['id'];?>" class="hover:bg-gray-50/50 dark:hover:bg-white/5 transition-colors">
-					<td class="px-6 py-4 font-mono font-medium text-gray-900 dark:text-white"><?php echo $item['id'];?>
+				<tr id="<?php echo htmlspecialchars($item['id'], ENT_QUOTES, 'UTF-8');?>" class="hover:bg-gray-50/50 dark:hover:bg-white/5 transition-colors">
+					<td class="px-6 py-4 font-mono font-medium text-gray-900 dark:text-white whitespace-nowrap"><?php echo htmlspecialchars($item['id'], ENT_QUOTES, 'UTF-8');?>
 					</td>
 					<td class="px-6 py-4">
-						<div class="font-bold text-gray-900 dark:text-white"><?php echo $item['class_name'] ?? '-';?>
+						<div class="font-bold text-gray-900 dark:text-white truncate max-w-[240px]" title="<?php echo htmlspecialchars($item['class_name'] ?? '-', ENT_QUOTES, 'UTF-8');?>"><?php echo htmlspecialchars($item['class_name'] ?? '-', ENT_QUOTES, 'UTF-8');?>
 						</div>
 						<?php if (!empty($item['method_name'])) { ?>
-						<div class="text-gray-500 dark:text-gray-400 text-xs">Method:
+						<div class="text-gray-500 dark:text-gray-400 text-xs truncate max-w-[240px]" title="Method: <?php echo htmlspecialchars($item['method_display'] ?? '', ENT_QUOTES, 'UTF-8');?>">Method:
 							<?php echo $item['method_display'];?>
 						</div>
 						<?php } ?>
 					</td>
-					<td class="px-6 py-4">
+					<td class="px-6 py-4 whitespace-nowrap">
 						<span
-							class="px-2 py-1 text-[10px] uppercase font-bold rounded-lg <?php echo $item['status_class']; ?>">
+							class="px-2 py-1 text-[10px] uppercase font-bold rounded-lg whitespace-nowrap <?php echo $item['status_class']; ?>">
 							<?php echo $item['status_label']; ?>
 						</span>
 					</td>
-					<td class="px-6 py-4">
+					<td class="px-6 py-4 whitespace-nowrap">
 						<span
 							class="px-2 py-1 text-xs font-bold rounded-lg bg-gray-100 dark:bg-slate-700 dark:text-gray-300">
 							P<?php echo $item['priority'] ?? '5'; ?>
 						</span>
 					</td>
-					<td class="px-6 py-4 text-gray-500 dark:text-gray-400 text-xs">
+					<td class="px-6 py-4 text-gray-500 dark:text-gray-400 text-xs whitespace-nowrap">
 						<?php echo $item['retry_progress']; ?>
 					</td>
-					<td class="px-6 py-4 text-gray-500 dark:text-gray-400 text-xs">
+					<td class="px-6 py-4 text-gray-500 dark:text-gray-400 text-xs whitespace-nowrap">
 						<?php echo $item['formatted_created_at']; ?>
 					</td>
-					<td class="px-6 py-4 text-right space-x-2">
+					<td class="px-6 py-4 text-right space-x-2 whitespace-nowrap">
 						<?php if (!empty($item['action_buttons'])) { foreach($item['action_buttons'] as $action) { ?>
 						<?php if ($action['type'] === 'button') { ?>
 						<button type="button" class="<?php echo $action['class']; ?>"
@@ -224,22 +224,5 @@
 		timeout: 2
 	});
 
-	/* Refresh page periodically if desired, or handle search */
-	const searchInput = document.getElementById('searchInput');
-	if (searchInput) {
-		searchInput.onkeypress = (e) => {
-			if (e.key === 'Enter') {
-				e.preventDefault();
-				const keywords = searchInput.value.trim();
-				const baseUrl = "<?php echo $view->url('admin/task/list'); ?>";
-				const params = {};
-				if (keywords) params.keywords = wellcms.urlEncode(keywords);
-
-				const currentStatus = "<?php echo $searchParams['status'] ?? ''; ?>";
-				if (currentStatus) params.status = currentStatus;
-
-				window.location = wellcms.url('admin/task/list', params);
-			}
-		};
-	}
+	/* Search handled by native form submit */
 </script>

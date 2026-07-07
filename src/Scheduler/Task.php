@@ -68,8 +68,8 @@ class Task
      */
     public $callbackUrl;
     /**
-     * 调用回调 URL 时使用的方法：POST / GET
-     * @var string
+     * 调用回调 URL 时使用的 HTTP 方法：METHOD_POST(0) / METHOD_GET(1)
+     * @var int
      */
     public $callbackMethod;
 
@@ -80,8 +80,8 @@ class Task
      */
     public $retryCount;
     /**
-     * 用于调试：pending/running/failed/success
-     * @var string
+     * 任务状态常量值：STATUS_PENDING(0) / RETRYING(1) / RUNNING(2) / SUCCESS(3) / FAILED(4) / CANCELLED(5)
+     * @var int
      */
     public $status;
     /**
@@ -100,11 +100,49 @@ class Task
      */
     public $scheduledAt;
     /**
+     * 开始执行时间（PersistenceQueue 使用）
+     * @var int
+     */
+    public $startedAt;
+    /**
+     * 完成时间（PersistenceQueue 使用）
+     * @var int
+     */
+    public $completedAt;
+    /**
      * 错误信息（执行失败时填充）
      * @var string
      */
     public $error;
     public const ALLOWED_JOB_NAMESPACES = ['App\\', 'Framework\\Scheduler\\', 'Plugins\\'];
+
+    // ── 状态常量（MySQL tinyint 映射） ──
+    const STATUS_PENDING   = 0;
+    const STATUS_RETRYING  = 1;
+    const STATUS_RUNNING   = 2;
+    const STATUS_SUCCESS   = 3;
+    const STATUS_FAILED    = 4;
+    const STATUS_CANCELLED = 5;
+
+    // ── HTTP 方法常量（MySQL tinyint 映射） ──
+    const METHOD_POST = 0;
+    const METHOD_GET  = 1;
+
+    /** @var array 旧版 status 字符串→新版 int 映射 */
+    private static $statusMapFromString = [
+        'pending'   => self::STATUS_PENDING,
+        'retrying'  => self::STATUS_RETRYING,
+        'running'   => self::STATUS_RUNNING,
+        'success'   => self::STATUS_SUCCESS,
+        'failed'    => self::STATUS_FAILED,
+        'cancelled' => self::STATUS_CANCELLED,
+    ];
+
+    /** @var array 旧版 HTTP method 字符串→新版 int 映射 */
+    private static $methodMapFromString = [
+        'POST' => self::METHOD_POST,
+        'GET'  => self::METHOD_GET,
+    ];
 
     public function __construct(
         string $id,
@@ -116,7 +154,7 @@ class Task
         int $retryDelay = 0,
         int $timeout = 0,
         string $callbackUrl = '',
-        string $callbackMethod = 'POST',
+        $callbackMethod = self::METHOD_POST,
         bool $validateClass = true
     ) {
         // 前置验证：使用 Task::sanitizeXxx() 方法确保数据安全性和一致性
@@ -132,7 +170,7 @@ class Task
         $this->callbackMethod = self::sanitizeHttpMethod($callbackMethod);
 
         $this->retryCount     = 0;
-        $this->status         = 'pending';
+        $this->status         = self::STATUS_PENDING;
         $this->createdAt      = time();
         $this->updatedAt      = time();
         $this->scheduledAt    = time();
@@ -195,13 +233,13 @@ class Task
             self::sanitizeRetryDelay($data['retryDelay'] ?? 0),
             self::sanitizeTimeout($data['timeout'] ?? 0),
             self::sanitizeUrl($data['callbackUrl'] ?? ''),
-            self::sanitizeHttpMethod($data['callbackMethod'] ?? 'POST'),
+            self::sanitizeHttpMethod($data['callbackMethod'] ?? self::METHOD_POST),
             $strictClassValidation
         );
 
         // 3. 设置状态字段
         $task->retryCount = self::sanitizeRetryCount($data['retryCount'] ?? 0);
-        $task->status = self::sanitizeStatus($data['status'] ?? 'pending');
+        $task->status = self::sanitizeStatus($data['status'] ?? self::STATUS_PENDING);
         $task->createdAt = self::sanitizeTimestamp($data['createdAt'] ?? time());
         $task->updatedAt = self::sanitizeTimestamp($data['updatedAt'] ?? time());
         $task->scheduledAt = self::sanitizeTimestamp($data['scheduledAt'] ?? time());
@@ -215,7 +253,7 @@ class Task
 
     public static function sanitizeId(string $id): string
     {
-        if (!preg_match('/^[a-zA-Z0-9_-]{1,128}$/', $id)) {
+        if (strlen($id) > 128) {
             throw new \InvalidArgumentException('Invalid task ID format');
         }
         return $id;
@@ -344,19 +382,37 @@ class Task
         return $url;
     }
 
-    public static function sanitizeHttpMethod(string $method): string
+    /**
+     * 规范化 HTTP 方法，兼容旧版字符串和新版 int
+     *
+     * @param int|string $method  METHOD_POST(0) / METHOD_GET(1) 或旧版 'POST' / 'GET'
+     * @return int
+     */
+    public static function sanitizeHttpMethod($method): int
     {
-        $method = strtoupper($method);
-        return in_array($method, ['GET', 'POST']) ? $method : 'POST';
+        if (is_int($method) || is_numeric($method)) {
+            $method = (int)$method;
+            return in_array($method, [self::METHOD_POST, self::METHOD_GET], true) ? $method : self::METHOD_POST;
+        }
+        $method = strtoupper((string)$method);
+        return isset(self::$methodMapFromString[$method]) ? self::$methodMapFromString[$method] : self::METHOD_POST;
     }
 
     /**
-     * @param array $status
+     * 规范化任务状态，兼容旧版字符串和新版 int
+     *
+     * @param int|string $status   STATUS_* 常量值或旧版 'pending' / 'running' / 'failed' / 'success' / 'retrying' / 'cancelled'
+     * @return int
      */
-    public static function sanitizeStatus($status): string
+    public static function sanitizeStatus($status): int
     {
-        $allowed = ['pending', 'running', 'failed', 'success', 'retrying'];
-        return in_array($status, $allowed) ? $status : 'pending';
+        if (is_int($status) || is_numeric($status)) {
+            $status = (int)$status;
+            $allowed = [self::STATUS_PENDING, self::STATUS_RETRYING, self::STATUS_RUNNING, self::STATUS_SUCCESS, self::STATUS_FAILED, self::STATUS_CANCELLED];
+            return in_array($status, $allowed, true) ? $status : self::STATUS_PENDING;
+        }
+        $status = (string)$status;
+        return isset(self::$statusMapFromString[$status]) ? self::$statusMapFromString[$status] : self::STATUS_PENDING;
     }
 
     /**

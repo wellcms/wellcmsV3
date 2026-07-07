@@ -6,6 +6,24 @@ namespace Framework\Scheduler\Jobs;
 
 class CallbackJob implements \Framework\Scheduler\Interfaces\JobInterface
 {
+    /** @var \Framework\Scheduler\Logger */
+    private $logger;
+
+    /** @var \Framework\Scheduler\HttpResultCallback|null */
+    private $httpCallback;
+
+    /**
+     * @param \Framework\Scheduler\Logger|null               $logger
+     * @param \Framework\Scheduler\HttpResultCallback|null    $httpCallback 从容器注入，未提供时降级为直接实例化
+     */
+    public function __construct(
+        ?\Framework\Scheduler\Logger $logger = null,
+        ?\Framework\Scheduler\HttpResultCallback $httpCallback = null
+    ) {
+        $this->logger = $logger ?? new \Framework\Scheduler\Logger();
+        $this->httpCallback = $httpCallback;
+    }
+
     /**
      * 执行回调通知
      * @param array $taskData 原始任务数据的数组形式
@@ -20,13 +38,13 @@ class CallbackJob implements \Framework\Scheduler\Interfaces\JobInterface
         try {
             $task = \Framework\Scheduler\Task::fromArray($taskData);
 
-            // 调用原有的 HttpResultCallback 发送请求
-            // 确保 HttpResultCallback 的 notify 方法能处理这种情况
-            (new \Framework\Scheduler\HttpResultCallback())->notify($task, $isSuccess, $elapsed, $error);
+            // 调用 HttpResultCallback 发送请求，优先使用容器注入的实例
+            $callback = $this->httpCallback ?? new \Framework\Scheduler\HttpResultCallback();
+            $callback->notify($task, $isSuccess, $elapsed, $error);
         } catch (\Throwable $e) {
             // 回调发送失败，记录日志，通常不需要再次抛出异常（避免回调死循环）
             // 也可以根据需求决定是否重试
-            error_log("Async callback failed: " . $e->getMessage());
+            $this->logger->log('Async callback failed: ' . $e->getMessage(), 'ERROR');
         }
     }
 }

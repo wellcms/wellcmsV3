@@ -44,11 +44,33 @@ class NotifyJob implements \Framework\Scheduler\Interfaces\JobInterface {
 'well_demo_dynamic_key' => '动态值',
 ```
 
-## 3. 编译驱动与调试准则
+## 3. 钩子归属与编写规范 (Hook Ownership)
+
+### 3.1 钩子文件名只是“位置坐标”
+`plugins_well_article_Services_CommentService_create_transaction_after.php` 这类文件名中的命名空间路径，**仅用来告诉编译器要注入到哪个类、哪个方法、哪个位置**，不代表这个 hook 应该由 `well_article` 实现。
+
+### 3.2 禁止插件 hook 自己
+- 宿主插件只负责在自己的 Service / Controller / Trait 里埋 `// hook xxx` 扩展点。
+- **禁止**在 `plugins/your_plugin/Hooks/` 下写目标类仍属于本插件的 hook 文件。
+- 如果你需要给本插件加功能，直接改本插件的类，不要绕一圈 hook。
+
+### 3.3 跨插件能力必须由能力提供方实现
+- **消息通知** → 由 `well_message` 实现，宿主插件（如 `well_article`、`well_forum`）只暴露 hook 点。
+- **搜索索引** → 由搜索插件实现。
+- **多站点同步** → 由 `well_multi_site_sync` 实现。
+- 宿主插件**不得**在自己的 `Hooks/` 里实现这些跨插件能力，避免硬耦合和功能重复。
+
+### 3.4 Hook 文件编写安全要点
+- 钩子代码会被编译器**内联到宿主方法体中**，因此钩子代码必须遵守宿主方法的返回类型。
+- 如果宿主方法返回 `array` / `ResponseInterface` 等非 `void` 类型，钩子中**严禁使用无值 `return;`**。
+- 推荐用 `if` 条件包裹早期退出逻辑，而不是 `return;`。
+- 优先使用 `\Plugins\well_message\Helpers\Notifier::sendSafe()` 等安全封装，避免在 hook 中直接写易抛异常的原生调用。
+
+## 4. 编译驱动与调试准则
 *   **生命周期自洽**：安装、卸载或修改插件配置后，系统会自动销毁 `compile_manifest.php`。下一次请求将强制触发“重扫模式”。
 *   **冻结模式**：当 `DEBUG === 0` 时，系统依赖清单不再执行 `filemtime` 检查。
 
-## 4. 参考实现 (Reference Implementation)
+## 5. 参考实现 (Reference Implementation)
 *   **前台语言包**：[zh/language.php](/plugins/well_forum/Language/zh/language.php)
 *   **后台语言包**：[zh/admin.php](/plugins/well_forum/Language/zh/admin.php)
 *   **动态语言逻辑钩子**：[language_zh_language.php](/plugins/well_forum/Hooks/language_zh_language.php)

@@ -361,9 +361,9 @@ class ExtensionManager
         $extension['downloaded'] = file_exists($configFile);
         $extension['cloud_version'] = (string)($official['version'] ?? $extension['version']);
         // FIX: 使用本地原始版本号与云端版本比较，避免官方覆盖后 version == cloud_version 导致 has_upgrade 永远为 false
-        $extension['has_upgrade'] = (int)($official['has_upgrade'] ?? (
-            ($extension['installed'] && version_compare($localVersion, (string)$extension['cloud_version'], '<')) ? 1 : 0
-        ));
+        $extension['has_upgrade'] = (true === ($official['has_upgrade'] ?? null))
+            ? 1
+            : (int)(($extension['installed'] && version_compare($localVersion, (string)$extension['cloud_version'], '<')) ? 1 : 0);
 
         return $extension;
     }

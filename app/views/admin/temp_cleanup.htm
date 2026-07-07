@@ -1,0 +1,43 @@
+<?php use App\Core\Compile;?>
+<?php include Compile::include(APP_PATH.'app/views/admin/header.inc.htm');?>
+
+<div class="flex justify-center w-full px-4 sm:px-0">
+	<div class="w-full max-w-2xl glass-panel rounded-2xl p-8 shadow-2xl">
+		<h2 class="text-xl font-bold mb-4 text-gray-900 dark:text-white flex items-center">
+			<span class="p-2 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg mr-3 shadow-inner">
+				<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+						d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+				</svg>
+			</span>
+			<?php echo $view->get('language.temp_cleanup_menu');?>
+		</h2>
+
+		<p class="text-gray-600 dark:text-gray-400 mb-8 text-sm leading-relaxed">
+			<?php echo $view->get('language.temp_cleanup_description');?>
+		</p>
+
+		<div class="pt-2">
+			<button type="button"
+				class="ajax-post w-full py-4 bg-blue-600 hover:bg-blue-700 text-white font-black uppercase tracking-widest text-xs rounded-xl shadow-lg shadow-blue-500/30 transition-all transform active:scale-[0.98] flex items-center justify-center space-x-2"
+				data-href="<?php echo $view->get('action');?>"
+				data-confirm="<?php echo $view->e('language.temp_cleanup_confirm');?>"
+				data-arg='<?php echo json_encode(['_csrf_token' => $view->get('csrf_token')]); ?>'
+				data-reload="false">
+				<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+						d="M13 10V3L4 14h7v7l9-11h-7z" />
+				</svg>
+				<span><?php echo $view->get('language.temp_cleanup_run');?></span>
+			</button>
+		</div>
+	</div>
+</div>
+
+<?php include Compile::include(APP_PATH . 'app/views/admin/footer.inc.htm');?>
+<script>
+	/*30分钟token失效，刷新页面*/
+	setTimeout(() => {
+		window.location.reload();
+	}, 1800000);
+</script>

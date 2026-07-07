@@ -200,7 +200,7 @@ class ThemeController extends BaseController
         }
 
         $read['operation_links'] = $this->extensionManager->buildOperationLinks($read);
-        foreach (['install', 'uninstall'] as $action) {
+        foreach (['install', 'uninstall', 'upgrade'] as $action) {
             if (!empty($read['operation_links'][$action])) {
                 $read['operation_links'][$action]['arg'] = ['dir' => $dir, '_csrf_token' => $csrfToken];
             }

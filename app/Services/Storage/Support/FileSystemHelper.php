@@ -100,9 +100,18 @@ class FileSystemHelper
         return $d;
     }
 
-    public function dailyFinalTmpDir()
+    public function dailyFinalTmpDir(?string $namespace = null)
     {
-        $d = $this->normalizePath($this->cfg['upload_temp']) . date($this->cfg['attach_dir_save_rule'] ?? 'Ym') . DIRECTORY_SEPARATOR;
+        if ($namespace !== null && $namespace !== '') {
+            $d = $this->normalizePath($this->cfg['upload_temp'])
+                . $namespace . DIRECTORY_SEPARATOR
+                . date($this->cfg['attach_dir_save_rule'] ?? 'Ym')
+                . DIRECTORY_SEPARATOR;
+        } else {
+            $d = $this->normalizePath($this->cfg['upload_temp'])
+                . date($this->cfg['attach_dir_save_rule'] ?? 'Ym')
+                . DIRECTORY_SEPARATOR;
+        }
         $this->ensureDir($d);
         return $d;
     }

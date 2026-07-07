@@ -381,6 +381,41 @@ class MyService {
 
 容器 bind 时 `defer=true` 创建延迟代理。调用代理方法时自动触发真实对象创建。**控制器不能声明具体 Service 类型的 getter 返回类型声明**，因为容器热路径可能返回 Proxy。
 
+### RedisCache 连接模型（关键架构决策）
+
+WellCMS 中有两条独立的 Redis 连接路径，选择不同的连接模型是**有意为之的设计**，不可混用：
+
+| 场景 | 获取方式 | 连接模型 | 适用原因 |
+|------|---------|---------|---------|
+| **Scheduler 守护进程** (CLI/Swoole) | `$container->get(RedisCache::class)` → **非池化直连** | 每个 `get()` 创建新 `RedisCache`+TCP 连接；非单例（`bind=false`） | 单进程顺序执行无并发争用，池化带来无谓的借还开销；`cachepre` 需要动态切换以支持多站点隔离 |
+| **FPM 管理操作** （低频） | `$cache = CacheManager` → `$cache->original('redis')` → **连接池** | 从 `RedisPool` 借/还连接，单例实例 | Swoole 多协程下防连接冲突；FPM 低频路径无性能诉求 |
+| **插件卸载脚本** （一次性） | `$container->get(RedisCache::class)` → **非池化直连** | 同 scheduler | 一次性 FPM 操作，借还无意义 |
+
+**为什么 scheduler 不用连接池（行业标准参照）：**
+
+- **Sidekiq**（Ruby 多线程）：每线程 1 直连，无池
+- **Celery**（Python 多进程）：每进程 1 直连，无池
+- **Bull**（Node.js event loop）：1 直连，无池
+- **Redis 自身**（单线程 event loop）：1 连接
+
+连接池解决的是 **多线程/多协程争用有限连接** 的问题。CLI 单进程顺序执行不存在争用——加池子反而多出三层闭包开销（`borrow → run → release`），且破坏 `cachepre` 多站点隔离。
+
+**Swoole 多协程特殊说明：** 当前 scheduler 通过 `reconnectRedis()` 在每个协程中新建连接来回避并发冲突。这是工作但不优雅的方案。后续如果正式启用 Swoole 模式，scheduler 应该统一走连接池。当前 CLl/FPM 模式下保持直连是正确的。
+
+```php
+// ✅ 正确：调度器直连（高频路径）
+$container->bind(RedisCache::class, fn($c) => new RedisCache($cfg), false, true);
+
+// ✅ 正确：FPM 管理操作通过 CacheManager 走池化（低频路径）
+$cache  = $container->get(CacheInterface::class); // CacheManager
+$redis  = $cache->original('redis');               // 池化 RedisCache
+
+// ❌ 禁止：在 FPM 管理操作中直接从容器取 RedisCache 绕开连接池
+$redis  = $container->get(RedisCache::class); // 绕过了 CacheManager，丢掉了连接池
+```
+
+**结论：** 当前设计（调度核心直连、管理操作走池化）是合理的分层。两项均为工业级标准做法，不需要统一。
+
 ## 国际化 (I18n)
 
 ### 语言包层级

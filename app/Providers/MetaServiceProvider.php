@@ -27,7 +27,7 @@ class MetaServiceProvider implements \Framework\Providers\ServiceProviderInterfa
             $logger = $container->get(\Framework\Logger\LoggerInterface::class);
             $logger->error("Error in " . get_class($this) . ": " . $e->getMessage());
             // 如果是 DEBUG 模式，就把异常抛出来，方便前端看到
-            if (defined('DEBUG') && DEBUG >= 2) throw $e;
+            if (\defined('DEBUG') && \DEBUG >= 2) throw $e;
         }
     }
 

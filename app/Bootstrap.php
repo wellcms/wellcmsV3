@@ -15,7 +15,7 @@ class Bootstrap
     {
         \Framework\Database\Collector\QueryCollector::startTime();
 
-        $appPath = defined('APP_PATH') ? APP_PATH : null;
+        $appPath = defined('APP_PATH') ? \APP_PATH : null;
         if ($appPath === null) {
             $currDir = str_replace('\\', '/', __DIR__);
             if (strpos($currDir, '/storage/tmp/') !== false) {
@@ -62,13 +62,21 @@ class Bootstrap
         ];
 
         // 如果是调度器模式，添加额外的服务提供者
-        if (defined('SCHEDULER_MODE') && SCHEDULER_MODE) {
+        if (defined('SCHEDULER_MODE') && \SCHEDULER_MODE) {
             // 添加调度器所需的服务提供者
             $providers['Scheduler'] = \App\Providers\SchedulerServiceProvider::class;
             // hook app_Bootstrap_scheduler.php
         }
 
         // hook app_Bootstrap_before.php
+
+        // 加载 Scheduler 工业级配置（v2 服务注册前必须可用）
+        try {
+            $schedulerConfig = require APP_PATH . 'config/Scheduler.php';
+            $container->set('schedulerConfig', is_array($schedulerConfig) ? $schedulerConfig : []);
+        } catch (\Throwable $e) {
+            $container->set('schedulerConfig', []);
+        }
 
         // 绑定服务 & 初始化逻辑
         foreach ($providers as $providerClass) {

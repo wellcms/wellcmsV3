@@ -21,10 +21,7 @@ class TaskController extends BaseController
     /** @var TaskManage */
     private $taskManage;
 
-    /** @var bool|null 缓存站点隔离标识检查结果 */
-    private $siteIsolationChecked;
-
-    protected function taskManage()
+    protected function getTaskManage()
     {
         if ($this->taskManage) return $this->taskManage;
 
@@ -40,12 +37,6 @@ class TaskController extends BaseController
         } catch (\Throwable $e) {
             $this->logOnce('TaskManage init failed: ' . $e->getMessage());
             return null;
-        }
-
-        // 3. 站点隔离标识：从当前请求域名自动获取，无需配置环境变量
-        if ($this->siteIsolationChecked === null) {
-            $host = $this->request->getUri()->getHost();
-            $this->siteIsolationChecked = ($host !== '');
         }
 
         return $this->taskManage;
@@ -84,7 +75,7 @@ class TaskController extends BaseController
         // hook app_Controllers_Admin_TaskController_dashboard_start.php
 
 
-        if ($this->taskManage()) {
+        if ($this->getTaskManage()) {
             // 获取统计数据
             $stats = [
                 'pending' => $this->taskManage->getPendingCount(),
@@ -104,11 +95,16 @@ class TaskController extends BaseController
 
             // 获取系统健康状态
             $systemHealth = $this->taskManage->getSystemHealth();
-            if ($systemHealth) {
-                // 计算进度条百分比，移出视图
-                $systemHealth['queue_percent'] = min(100, max(0, (int)($systemHealth['queue_size'] ?? 0)));
-                $systemHealth['memory_percent'] = (int)str_replace('%', '', $systemHealth['memory_usage'] ?? '0');
-            }
+
+            // 安全兜底：确保关键字段存在（即使上游因异常返回不完整数据）
+            $systemHealth['redis_connected'] = !empty($systemHealth['redis_connected']);
+            $systemHealth['queue_size']      = max(0, (int)($systemHealth['queue_size'] ?? 0));
+            $systemHealth['memory_usage']    = $systemHealth['memory_usage'] ?? '0%';
+            $systemHealth['last_execution']  = max(0, (int)($systemHealth['last_execution'] ?? 0));
+
+            // 计算展示百分比（移出视图层）
+            $systemHealth['queue_percent']   = min(100, $systemHealth['queue_size']);
+            $systemHealth['memory_percent']  = (int)str_replace('%', '', $systemHealth['memory_usage']);
         } else {
             $stats = null;
             $recentTasks = null;
@@ -150,7 +146,7 @@ class TaskController extends BaseController
                 'class_name' => $this->language->get('class_name'),
                 'status' => $this->language->get('status'),
                 'priority' => $this->language->get('priority'),
-                'retry_count' => $this->language->get('retry_count'),
+                'retry' => $this->language->get('retry'),
                 'created_at' => $this->language->get('created_at'),
                 'details' => $this->language->get('details'),
                 'env_setup_title' => $this->language->get('env_setup_title'),
@@ -160,10 +156,14 @@ class TaskController extends BaseController
                 'redis_ref_label' => $this->language->get('redis_ref_label'),
                 'scheduler_setup_title' => $this->language->get('scheduler_setup_title'),
                 'scheduler_setup_desc' => $this->language->get('scheduler_setup_desc', ['file' => APP_PATH . 'bin/scheduler']),
-                'badge_waitlist' => 'Waitlist',
-                'badge_running' => 'Running',
-                'badge_healthy' => 'Healthy',
-                'badge_critical' => 'Critical',
+                'pending' => $this->language->get('task_status_pending'),
+                'running' => $this->language->get('task_status_running'),
+                'success' => $this->language->get('task_status_success'),
+                'failed' => $this->language->get('task_status_failed'),
+                'badge_waitlist' => $this->language->get('badge_waitlist'),
+                'badge_running' => $this->language->get('badge_running'),
+                'badge_healthy' => $this->language->get('badge_healthy'),
+                'badge_critical' => $this->language->get('badge_critical'),
                 'view_guide' => $this->language->get('view_guide'),
                 'system_status' => $this->language->get('system_health')
             ],
@@ -194,8 +194,11 @@ class TaskController extends BaseController
         // 获取导航栏信息
         $menu = $this->getAdminMenu();
 
-        // 搜索参数
+        // 搜索参数（强制状态筛选，避免无状态时全量扫描多队列）
         $status = RequestUtils::param('status', '');
+        if (empty($status)) {
+            $status = 'pending';
+        }
         $keywords = RequestUtils::param('keywords', '');
         $page = RequestUtils::param('page', 1);
         $pageSize = 20;
@@ -212,7 +215,7 @@ class TaskController extends BaseController
             $extra += ['page' => $page];
         }
 
-        if ($this->taskManage()) {
+        if ($this->getTaskManage()) {
             $taskStatus = 'success';
             // 调用新增的 listTasks 方法，支持过滤和分页
             $result = $this->taskManage->listTasks($status, $keywords, $page, $pageSize);
@@ -243,13 +246,8 @@ class TaskController extends BaseController
             ];
         }
 
-        // 构建标签页菜单
+        // 构建标签页菜单（强制状态筛选，避免全量扫描）
         $tabMenu = [
-            [
-                'label' => $this->language->get('all'),
-                'url' => $this->urlGenerator->url('admin/task/list'),
-                'active' => empty($status)
-            ],
             [
                 'label' => $this->language->get('task_status_pending'),
                 'url' => $this->urlGenerator->url('admin/task/list', array_merge($extra, ['status' => 'pending'])),
@@ -318,7 +316,7 @@ class TaskController extends BaseController
                 'method_name' => $this->language->get('method_name'),
                 'status' => $this->language->get('status'),
                 'priority' => $this->language->get('priority'),
-                'retry_count' => $this->language->get('retry_count'),
+                'retry' => $this->language->get('retry'),
                 'created_at' => $this->language->get('created_at'),
                 'scheduled_at' => $this->language->get('scheduled_at'),
                 'operation' => $this->language->get('operation'),
@@ -340,7 +338,9 @@ class TaskController extends BaseController
                 'redis_setup_desc' => $this->language->get('redis_setup_desc', ['file' => '/config/Cache.php']),
                 'redis_ref_label' => $this->language->get('redis_ref_label'),
                 'scheduler_setup_title' => $this->language->get('scheduler_setup_title'),
-                'scheduler_setup_desc' => $this->language->get('scheduler_setup_desc', ['file' => '/bin/scheduler'])
+                'scheduler_setup_desc' => $this->language->get('scheduler_setup_desc', ['file' => '/bin/scheduler']),
+                'previous' => $this->language->get('previous'),
+                'next' => $this->language->get('next')
             ]
         ];
 
@@ -365,7 +365,7 @@ class TaskController extends BaseController
         $menu = $this->getAdminMenu();
 
         // 获取失败任务列表
-        if ($this->taskManage()) {
+        if ($this->getTaskManage()) {
             $result = $this->taskManage->failedList();
             if (!empty($result['items'])) {
                 foreach ($result['items'] as &$item) {
@@ -403,7 +403,7 @@ class TaskController extends BaseController
                 'task_id' => $this->language->get('task_id'),
                 'class_name' => $this->language->get('class_name'),
                 'status' => $this->language->get('status'),
-                'retry_count' => $this->language->get('retry_count'),
+                'retry' => $this->language->get('retry'),
                 'confirm_requeue' => $this->language->get('confirm_requeue'),
                 'operating' => $this->language->get('operating'),
                 'error_message' => $this->language->get('operation_failed'),
@@ -433,7 +433,7 @@ class TaskController extends BaseController
 
         // hook app_Controllers_Admin_TaskController_details_before.php
 
-        if (!$this->taskManage()) {
+        if (!$this->getTaskManage()) {
             return $this->errorMessage($this->language->get('operation_failed'), 3);
         }
 
@@ -491,7 +491,7 @@ class TaskController extends BaseController
                     'status' => $this->language->get('status'),
                     'priority' => $this->language->get('priority'),
                     'retry_info' => $this->language->get('retry_info'),
-                    'retry_count' => $this->language->get('current_retry_count'),
+                    'retry' => $this->language->get('current_retry'),
                     'max_retries' => $this->language->get('max_retries'),
                     'retry_delay' => $this->language->get('retry_delay'),
                     'timeout' => $this->language->get('timeout'),
@@ -534,7 +534,7 @@ class TaskController extends BaseController
         }
 
         try {
-            if (!$this->taskManage()) {
+            if (!$this->getTaskManage()) {
                 return $this->errorMessage($this->language->get('operation_failed'), -1);
             }
             $result = $this->taskManage->cancelTask($taskId);
@@ -562,7 +562,7 @@ class TaskController extends BaseController
         }
 
         try {
-            if (!$this->taskManage()) {
+            if (!$this->getTaskManage()) {
                 return $this->errorMessage($this->language->get('operation_failed'), -1);
             }
             $result = $this->taskManage->retryTask($taskId);
@@ -586,16 +586,15 @@ class TaskController extends BaseController
     public function requeue(\Framework\Http\Interfaces\ServerRequestInterface $request): ResponseInterface
     {
         // 获取POST请求数据
-        $postData = $request->getParsedBody();
-
-        $taskIds = $postData['task_ids'] ?? []; // 数组参数仍需从 parsedBody 获取，RequestUtils::post 默认处理字符串
+        $taskIds = RequestUtils::post('task_ids', []);
 
         if (empty($taskIds) || !is_array($taskIds)) {
             return $this->errorMessage($this->language->get('parameter_error', array('error' => 'task_ids')), 1);
         }
 
+        // 对每个 ID 单独校验，返回成功数与失败明细
         try {
-            if (!$this->taskManage()) {
+            if (!$this->getTaskManage()) {
                 return $this->errorMessage($this->language->get('operation_failed'), -1);
             }
             $result = $this->taskManage->requeueFailed($taskIds);
@@ -617,7 +616,7 @@ class TaskController extends BaseController
     private const FIELD_MAP = [
         'className'    => 'class_name',
         'methodName'   => 'method_display',
-        'retryCount'   => 'retry_count',
+        'retryCount'   => 'retry',
         'maxRetries'   => 'max_retries',
         'retryDelay'   => 'retry_delay_seconds',
         'callbackMethod' => 'callback_method_display',
@@ -625,13 +624,22 @@ class TaskController extends BaseController
         'error'        => 'error_display',
     ];
 
-    /** @var array 状态→CSS class 映射 */
+    /** @var array 状态(int)→CSS class 映射 */
     private const STATUS_CLASS_MAP = [
-        'pending'  => 'bg-yellow-100/50 text-yellow-600 dark:bg-yellow-900/30 dark:text-yellow-400',
-        'retrying' => 'bg-orange-100/50 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400',
-        'running'  => 'bg-blue-100/50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400',
-        'success'  => 'bg-green-100/50 text-green-600 dark:bg-green-900/30 dark:text-green-400',
-        'failed'   => 'bg-red-100/50 text-red-600 dark:bg-red-900/30 dark:text-red-400',
+        0 => 'bg-yellow-100/50 text-yellow-600 dark:bg-yellow-900/30 dark:text-yellow-400',  // pending
+        1 => 'bg-orange-100/50 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400',  // retrying
+        2 => 'bg-blue-100/50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400',          // running
+        3 => 'bg-green-100/50 text-green-600 dark:bg-green-900/30 dark:text-green-400',      // success
+        4 => 'bg-red-100/50 text-red-600 dark:bg-red-900/30 dark:text-red-400',              // failed
+    ];
+
+    /** @var array 状态(int)→语言键 映射 */
+    private const STATUS_LABEL_KEY_MAP = [
+        0 => 'task_status_pending',
+        1 => 'task_status_retrying',
+        2 => 'task_status_running',
+        3 => 'task_status_success',
+        4 => 'task_status_failed',
     ];
 
     /**
@@ -640,10 +648,10 @@ class TaskController extends BaseController
      */
     private function formatTask(array $task, string $dateFormat = 'Y-m-d H:i:s'): array
     {
-        $status = $task['status'] ?? 'pending';
+        $status = (int)($task['status'] ?? \Framework\Scheduler\Task::STATUS_PENDING);
 
         // 1. Status Label & Class
-        $task['status_label'] = $this->language->get('task_status_' . $status);
+        $task['status_label'] = $this->language->get(self::STATUS_LABEL_KEY_MAP[$status] ?? 'task_status_pending');
         $task['status_class'] = self::STATUS_CLASS_MAP[$status] ?? 'bg-gray-100 text-gray-600 dark:bg-gray-900/30 dark:text-gray-400';
 
         // 2. Date Formatting
@@ -657,10 +665,10 @@ class TaskController extends BaseController
         }
         $task['retry_progress'] = ($task['retryCount'] ?? '0') . ' / ' . ($task['maxRetries'] ?? '0');
         $task['retry_delay_seconds'] .= ' Seconds';
-        $task['callback_method_display'] = strtoupper($task['callbackMethod'] ?? 'POST');
-        $task['callback_url_display'] = htmlspecialchars($task['callbackUrl'] ?? '', ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-        $task['error_display'] = htmlspecialchars($task['error'] ?? '', ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-        $task['formatted_args'] = htmlspecialchars(json_encode($task['args'] ?? [], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE), ENT_QUOTES, 'UTF-8');
+        $task['callback_method_display'] = $this->language->get('callback_method_' . ((int)($task['callbackMethod'] ?? \Framework\Scheduler\Task::METHOD_POST)));
+        $task['callback_url_display'] = $task['callbackUrl'] ?? '';
+        $task['error_display'] = $task['error'] ?? '';
+        $task['formatted_args'] = json_encode($task['args'] ?? [], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
 
         return $task;
     }
@@ -692,7 +700,7 @@ class TaskController extends BaseController
         }
 
         // 2. 取消按钮（待处理/运行中）
-        if (in_array($task['status'], ['pending', 'running', 'retrying'])) {
+        if (in_array((int)($task['status'] ?? -1), [\Framework\Scheduler\Task::STATUS_PENDING, \Framework\Scheduler\Task::STATUS_RUNNING, \Framework\Scheduler\Task::STATUS_RETRYING], true)) {
             $baseClass = ($context === 'details')
                 ? 'ajax-post flex-1 sm:flex-none px-6 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl shadow-lg shadow-amber-500/30 transition-all font-bold text-center'
                 : 'ajax-post text-amber-600 hover:text-amber-800 dark:text-amber-400 dark:hover:text-amber-300 font-bold transition-colors';
@@ -711,7 +719,7 @@ class TaskController extends BaseController
         }
 
         // 3. 重试按钮（失败）
-        if ($task['status'] === 'failed') {
+        if ((int)($task['status'] ?? -1) === \Framework\Scheduler\Task::STATUS_FAILED) {
             $baseClass = ($context === 'details')
                 ? 'ajax-post flex-1 sm:flex-none px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-lg shadow-blue-500/30 transition-all font-bold text-center'
                 : 'ajax-post text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300 font-bold transition-colors';
@@ -743,7 +751,7 @@ class TaskController extends BaseController
         $menu = $this->getAdminMenu();
 
         try {
-            if (!$this->taskManage()) {
+            if (!$this->getTaskManage()) {
                 return $this->errorMessage($this->language->get('operation_failed'), -1);
             }
             $logs = $this->taskManage->getLogs($taskId, 500);
@@ -800,7 +808,7 @@ class TaskController extends BaseController
         }
 
         try {
-            if (!$this->taskManage()) {
+            if (!$this->getTaskManage()) {
                 return $this->errorMessage($this->language->get('operation_failed'), -1);
             }
             $result = $this->taskManage->updatePriority($taskId, $priority);

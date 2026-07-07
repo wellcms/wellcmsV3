@@ -220,7 +220,7 @@ class ResponseFormatter
 
     protected function buildTemplateErrorMessage(\Throwable $e, array $policy): string
     {
-        if (defined('DEBUG') && DEBUG > 0) {
+        if (defined('DEBUG') && \DEBUG > 0) {
             return '<h1>Template Render Error</h1>'
                 . '<p><strong>Message:</strong> ' . htmlspecialchars($e->getMessage(), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</p>'
                 . '<p><strong>File:</strong> ' . htmlspecialchars(\App\Utils\PathHelper::relative($e->getFile()), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')

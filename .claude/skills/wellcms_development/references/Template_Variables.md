@@ -3,34 +3,9 @@
 本指南总结了 WellCMS 3.0 模板中常用的变量及其结构，方便开发者在编写 `.htm` 文件时准确调用数据。
 
 ## 1. 变量访问逻辑
-
-### `$view` 是一层数据容器，仅存储控制器传入的 `$data`
-
-在模板中，`$view` 对象只能访问 `$this->render($layout, $data, ...)` 中传入的 `$data` 数据。
-
-### 转义铁律：`$view->e()` 仅用于 `$view` 数据，foreach 循环变量用 `htmlspecialchars()`
-
-| 场景 | 方法 | 示例 |
-|------|------|------|
-| `$view` 存储的数据（控制器传入） | `$view->e('key')` | `<?php echo $view->e('csrf_token');?>` |
-| `$view` 嵌套数据（点号访问） | `$view->e('key.sub')` | `<?php echo $view->e('website.header.title');?>` |
-| `$view` 数据用于遍历/赋值 | `$view->get('key')` | `<?php $nodes = $view->get('remote_nodes');?>` |
-| **foreach 循环内的数组变量** | `htmlspecialchars()` | `<?php echo htmlspecialchars($node['name']);?>` |
-| **HTML 属性中的整型值** | `(int)` 强转 | `<?php echo (int)$node['id'];?>` |
-
-```php
-// ❌ 严禁：对 foreach 变量使用 $view->e()——$node 不在 $view 数据中，输出为空
-<?php foreach ($nodes as $node): ?>
-    <span><?php echo $view->e($node['site_id']);?></span>
-<?php endforeach; ?>
-
-// ✅ 正确：foreach 变量是普通 PHP 数组，用 htmlspecialchars()
-<?php foreach ($nodes as $node): ?>
-    <span><?php echo htmlspecialchars($node['site_id']);?></span>
-<?php endforeach; ?>
-```
-
-**记忆口诀**：`$view->e()` 转义 `$view` 家的数据；`htmlspecialchars()` 转义自己家的变量。
+在模板中，所有变量均通过 `$view` 对象访问：
+- **安全转义输出**: `<?php echo $view->e('key.subkey');?>` (推荐，默认处理 HTML 转义)
+- **原始数据获取**: `<?php $data = $view->raw('key.subkey', $default);?>` (用于遍历或逻辑判断)
 
 ---
 

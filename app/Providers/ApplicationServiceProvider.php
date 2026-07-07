@@ -65,7 +65,7 @@ class ApplicationServiceProvider implements \Framework\Providers\ServiceProvider
         $container->bind(\App\Services\ErrorResponseBuilder::class, function ($c) use ($errorConfig) {
             return new \App\Services\ErrorResponseBuilder(
                 $c,
-                (bool)(\defined('DEBUG') ? DEBUG : 0),
+                (bool)(\defined('DEBUG') ? \DEBUG : 0),
                 $errorConfig
             );
         }, true, false);
@@ -147,55 +147,93 @@ class ApplicationServiceProvider implements \Framework\Providers\ServiceProvider
         $container->bind(\App\Services\Extension\ExtensionManager::class, \App\Services\Extension\ExtensionManager::class, false, false);
 
         // 7. 数据库分区管理器
-        $container->bind(\Framework\Database\Partition\PartitionRegistry::class, function ($container) {
-            $cache = $container->get(\Framework\Cache\Interfaces\CacheInterface::class);
-            $db = $container->get(\Framework\Database\Interfaces\DatabaseInterface::class);
-            return new \Framework\Database\Partition\PartitionRegistry($cache, $db);
-        }, true, false);
+        // ——— PartitionDialectInterface（新增）———
+        $container->bind(
+            \Framework\Database\Partition\PartitionDialectInterface::class,
+            function ($c) {
+                $dbConfig = $c->get('dbConfig');
+                $driver = $dbConfig['driver'] ?? 'mysql';
 
-        $container->bind(\Framework\Database\Partition\PartitionManager::class, function ($container) {
-            $registry = $container->get(\Framework\Database\Partition\PartitionRegistry::class);
-            $db = $container->get(\Framework\Database\Interfaces\DatabaseInterface::class);
-            $cache = $container->get(\Framework\Cache\Interfaces\CacheInterface::class);
-            $logger = $container->get(\Framework\Logger\LoggerInterface::class);
-
-            // TaskManage 可能不可用（无 Redis），使用可选获取
-            $taskManage = null;
-            if ($container->has(\Framework\Scheduler\TaskManage::class)) {
-                try {
-                    $taskManage = $container->get(\Framework\Scheduler\TaskManage::class);
-                } catch (\Throwable $e) {
-                    // TaskManage 需要 Redis，忽略失败
+                // PG 版本预检（pg_partition_tree 是 PG 12+ 函数）
+                if ($driver === 'pgsql') {
+                    $db = $c->get(\Framework\Database\Interfaces\DatabaseInterface::class);
+                    $version = $db->version();
+                    // 解析前两个数字段，排除括号后缀如 "14.10 (Ubuntu ...)"
+                    $majorVer = preg_match('/^(\d+\.\d+)/', $version, $m) ? $m[1] : $version;
+                    if (version_compare($majorVer, '12.0', '<')) {
+                        throw new \RuntimeException(sprintf(
+                            'PartitionManager requires PostgreSQL 12+ (current: %s). '
+                            . 'Older PG versions must manage partitions manually.',
+                            $version
+                        ));
+                    }
                 }
-            }
 
-            $dbConfig = $container->get('dbConfig');
-            $prefix = isset($dbConfig['prefix']) ? $dbConfig['prefix'] : 'well_';
+                return \Framework\Database\Partition\PartitionDialectFactory::createFromConfig(
+                    $dbConfig
+                );
+            },
+            false,  // 非单例？不——方言无状态，单例安全
+            true    // defer: 延迟实例化
+        );
 
-            return new \Framework\Database\Partition\PartitionManager(
-                $registry,
-                $db,
-                $cache,
-                $logger,
-                $taskManage,
-                $prefix
-            );
-        }, true, false);
+        // ——— PartitionManager（修改：新增 $dialect）———
+        $container->bind(
+            \Framework\Database\Partition\PartitionManager::class,
+            function ($c) {
+                $dbConfig = $c->get('dbConfig');
+                $dialect = $c->get(
+                    \Framework\Database\Partition\PartitionDialectInterface::class
+                );
 
-        // Scheduler RedisCache：web 端从请求域名动态追加 key 前缀，多站点自动隔离
-        // Swoole HTTP / FPM 均可通过 RequestStack::getCurrent() 获取当前域名
-        // CLI scheduler 无请求，走 cachepre 原值或 env 前缀
+                // TaskManage 可能不可用（无 Redis），使用可选获取
+                $taskManage = null;
+                if ($c->has(\Framework\Scheduler\TaskManage::class)) {
+                    try {
+                        $taskManage = $c->get(\Framework\Scheduler\TaskManage::class);
+                    } catch (\Throwable $e) {
+                        // TaskManage 需要 Redis，忽略失败
+                    }
+                }
+
+                return new \Framework\Database\Partition\PartitionManager(
+                    $c->get(\Framework\Database\Partition\PartitionRegistry::class),
+                    $c->get(\Framework\Database\Interfaces\DatabaseInterface::class),
+                    $c->get(\Framework\Cache\Interfaces\CacheInterface::class),
+                    $c->get(\Framework\Logger\LoggerInterface::class),
+                    $taskManage,
+                    $dbConfig['prefix'] ?? 'well_',
+                    $dialect
+                );
+            },
+            false,
+            true
+        );
+
+        // ——— PartitionRegistry（修改：新增 $dialect）———
+        $container->bind(
+            \Framework\Database\Partition\PartitionRegistry::class,
+            function ($c) {
+                $dialect = $c->get(
+                    \Framework\Database\Partition\PartitionDialectInterface::class
+                );
+                return new \Framework\Database\Partition\PartitionRegistry(
+                    $c->get(\Framework\Cache\Interfaces\CacheInterface::class),
+                    $c->get(\Framework\Database\Interfaces\DatabaseInterface::class),
+                    $dialect
+                );
+            },
+            false,
+            true
+        );
+
+        // Scheduler RedisCache：使用 config/Cache.php 的 cachepre 原值，
+        // 多站点隔离通过环境变量 WELLCMS_SITE_ID 配置。CLI/Swoole/FPM 统一。
         $container->bind(\Framework\Cache\Drivers\RedisCache::class, function ($c) {
             $cfg = $c->get('cacheConfig');
             $redisCfg = $cfg['stores']['redis'] ?? [];
             if (empty($redisCfg)) {
                 throw new \RuntimeException("Scheduler requires 'redis' driver in config/cache.php");
-            }
-            $request = \Framework\Http\Psr7\RequestStack::getCurrent();
-            $host = $request ? $request->getUri()->getHost() : '';
-            if ($host !== '') {
-                $redisCfg['cachepre'] = ($redisCfg['cachepre'] ?? '')
-                    . str_replace('.', '_', $host) . '_';
             }
             return new \Framework\Cache\Drivers\RedisCache($redisCfg);
         }, false, true);

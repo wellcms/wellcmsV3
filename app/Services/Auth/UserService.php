@@ -125,8 +125,8 @@ class UserService
             }
 
             $allowedTypes = [IMAGETYPE_GIF, IMAGETYPE_JPEG, IMAGETYPE_PNG];
-            if (defined('IMAGETYPE_BMP')) $allowedTypes[] = IMAGETYPE_BMP;
-            if (defined('IMAGETYPE_WEBP')) $allowedTypes[] = IMAGETYPE_WEBP;
+            if (\defined('IMAGETYPE_BMP')) $allowedTypes[] = IMAGETYPE_BMP;
+            if (\defined('IMAGETYPE_WEBP')) $allowedTypes[] = IMAGETYPE_WEBP;
             if (!in_array($imageInfo[2], $allowedTypes, true)) {
                 $msg = $language ? $language->get('upload_failed') : 'upload_failed';
                 throw new BusinessException($msg, 15);
@@ -158,9 +158,9 @@ class UserService
                     $src = imagecreatefromjpeg($tmpPath);
                 } elseif ($imageType === IMAGETYPE_PNG) {
                     $src = imagecreatefrompng($tmpPath);
-                } elseif (defined('IMAGETYPE_BMP') && $imageType === IMAGETYPE_BMP) {
+                } elseif (\defined('IMAGETYPE_BMP') && $imageType === IMAGETYPE_BMP) {
                     $src = imagecreatefrombmp($tmpPath);
-                } elseif (defined('IMAGETYPE_WEBP') && $imageType === IMAGETYPE_WEBP) {
+                } elseif (\defined('IMAGETYPE_WEBP') && $imageType === IMAGETYPE_WEBP) {
                     $src = imagecreatefromwebp($tmpPath);
                 } else {
                     $src = false;

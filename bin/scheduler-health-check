@@ -17,6 +17,8 @@ declare(strict_types=1);
 
 define('IN_WELLCMS', true);
 define('APP_PATH', dirname(__DIR__) . DIRECTORY_SEPARATOR);
+define('DEBUG', 0);
+define('SCHEDULER_MODE', true);
 
 require APP_PATH . 'app/Core/Compile.php';
 require APP_PATH . 'app/Core/Autoload.php';
@@ -27,9 +29,6 @@ $webhookUrl = $options['webhook'] ?? ''; // 可选：通知地址
 $threshold = (int)($options['threshold'] ?? 1000); // 积压阈值
 $isDaemon = isset($options['daemon']); // 是否以守护进程模式运行
 $interval = (int)($options['interval'] ?? 60); // 间隔秒数
-
-define('DEBUG', 0);
-define('SCHEDULER_MODE', true);
 
 // 循环执行逻辑 (支持 Daemon 模式)
 do {
@@ -76,8 +75,8 @@ function executeHealthCheck(string $webhookUrl, int $threshold)
                             break;
                         }
                     }
-                    // 匹配异常关键字
-                    if (preg_match('/Loop exception|Memory limit hit|failed/i', $line)) {
+                    // 匹配异常关键字（精确匹配，避免 normal task failure 误报）
+                    if (preg_match('/\b(CRITICAL|FATAL|Loop exception|Memory limit hit)\b/i', $line)) {
                         $errors[] = $line;
                         $count++;
                         if ($count >= 5) {
@@ -119,6 +118,11 @@ function triggerWebhook(string $url, string $content)
     curl_setopt($ch, CURLOPT_POST, true);
     curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
     curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
-    curl_exec($ch);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
+    $response = curl_exec($ch);
+    if ($response === false) {
+        fwrite(STDERR, "Webhook curl error: " . curl_error($ch) . PHP_EOL);
+    }
     curl_close($ch);
 }

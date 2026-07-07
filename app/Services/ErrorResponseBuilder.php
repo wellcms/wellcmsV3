@@ -43,13 +43,54 @@ class ErrorResponseBuilder
      *
      * 决策树：
      * 1. API/AJAX 请求 → 始终 JSON（含 debug 信息）
-     * 2. 非调试 + BusinessException → 主题 message.htm
-     * 3. 其他 → 系统错误视图（debug → error_debug.htm / 生产 → 500.htm）
+     * 2. 非 API 的 HTTP 异常 → ErrorController 渲染主题/核心错误页
+     * 3. 非调试 + BusinessException → 主题 message.htm
+     * 4. 其他 → 系统错误视图（debug → error_debug.htm / 生产 → 500.htm）
      */
     public function build(\Throwable $e, ServerRequestInterface $request): ResponseInterface
     {
         $statusCode = $this->resolveStatusCode($e);
 
+        if ($this->isApiRequest($request)) {
+            $data = $this->buildErrorData($e, $statusCode);
+            return $this->createJsonResponse($data, $statusCode);
+        }
+
+        // 非 API 的 HTTP 异常：直接由 ErrorController 渲染主题/核心错误页
+        if ($e instanceof \Framework\Exception\HttpException) {
+            try {
+                $controller = $this->container->get(\App\Controllers\Frontend\ErrorController::class);
+
+                if ($e instanceof \Framework\Exception\Http\NotFoundException) {
+                    return $controller->error404($request);
+                }
+
+                if ($e instanceof \Framework\Exception\Http\ForbiddenException) {
+                    return $controller->error403($request);
+                }
+
+                return $controller->error500($request);
+            } catch (\Throwable $controllerError) {
+                $this->logInternalError('ErrorController failed, fallback to system error view', $controllerError);
+            }
+        }
+
+        $data = $this->buildErrorData($e, $statusCode);
+
+        // 非调试模式下业务错误继续走主题 message.htm
+        if (!$this->debug && $e instanceof BusinessException) {
+            try {
+                return $this->createThemeMessageResponse($data, $request);
+            } catch (\Throwable $t) {
+                $this->logInternalError('Theme message render failed', $t);
+            }
+        }
+
+        return $this->createSystemErrorResponse($data, $statusCode);
+    }
+
+    private function buildErrorData(\Throwable $e, int $statusCode): array
+    {
         // 审计修订：移除布尔型 `success` 字段，遵循 Iron Law #11
         // 统一使用 `status` 字符串字段作为唯一状态指示器
         $data = [
@@ -74,20 +115,7 @@ class ErrorResponseBuilder
             ];
         }
 
-        if ($this->isApiRequest($request)) {
-            return $this->createJsonResponse($data, $statusCode);
-        }
-
-        // 非调试模式下业务错误继续走主题 message.htm
-        if (!$this->debug && $e instanceof BusinessException) {
-            try {
-                return $this->createThemeMessageResponse($data, $request);
-            } catch (\Throwable $t) {
-                $this->logInternalError('Theme message render failed', $t);
-            }
-        }
-
-        return $this->createSystemErrorResponse($data, $statusCode);
+        return $data;
     }
 
     private function resolveStatusCode(\Throwable $e): int
@@ -169,7 +197,7 @@ class ErrorResponseBuilder
     private function createSystemErrorResponse(array $data, int $statusCode): ResponseInterface
     {
         $templateName = $this->debug ? 'error_debug.htm' : '500.htm';
-        $templateFile = defined('APP_PATH') ? APP_PATH . 'app/views/htm/' . $templateName : '';
+        $templateFile = \defined('APP_PATH') ? \APP_PATH . 'app/views/htm/' . $templateName : '';
 
         if ($templateFile && file_exists($templateFile)) {
             return $this->renderView($templateFile, $data, $statusCode);

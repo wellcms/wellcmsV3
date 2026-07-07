@@ -216,7 +216,7 @@ class HttpClient
                 '#^(https?://)([^/]+)#i',
                 static function ($m) {
                     $host = $m[2];
-                    $ascii = @idn_to_ascii($host, IDNA_DEFAULT, defined('INTL_IDNA_VARIANT_UTS46') ? INTL_IDNA_VARIANT_UTS46 : 0);
+                    $ascii = @idn_to_ascii($host, IDNA_DEFAULT, \defined('INTL_IDNA_VARIANT_UTS46') ? INTL_IDNA_VARIANT_UTS46 : 0);
                     return $ascii ? $m[1] . $ascii : $m[0];
                 },
                 $raw
@@ -393,7 +393,7 @@ class HttpClient
 
         // 支持http2可配置
         $version = CURL_HTTP_VERSION_1_1;
-        if (!empty($opt['http2']) && defined('CURL_HTTP_VERSION_2TLS')) {
+        if (!empty($opt['http2']) && \defined('CURL_HTTP_VERSION_2TLS')) {
             $curlVersion = curl_version()['version'] ?? '';
             if (version_compare($curlVersion, '7.58.0', '>=')) {
                 $version = CURL_HTTP_VERSION_2TLS;
@@ -720,7 +720,7 @@ class HttpClient
         }
 
         $candidates = [
-            (defined('APP_PATH') ? APP_PATH : dirname(__DIR__, 2) . '/') . 'cacert.pem'
+            (\defined('APP_PATH') ? \APP_PATH : \dirname(__DIR__, 2) . '/') . 'cacert.pem'
         ];
 
         if (function_exists('openssl_get_cert_locations')) {

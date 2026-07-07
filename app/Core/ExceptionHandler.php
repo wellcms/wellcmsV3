@@ -222,7 +222,7 @@ class ExceptionHandler
             return null;
         }
 
-        $path = defined('APP_PATH') ? APP_PATH . 'app/views/htm/' . $file : '';
+        $path = defined('APP_PATH') ? \APP_PATH . 'app/views/htm/' . $file : '';
         return ($path && file_exists($path)) ? $path : null;
     }
 
@@ -246,6 +246,10 @@ class ExceptionHandler
 
     protected function logException(\Throwable $e): void
     {
+        // HTTP 状态码异常（404/403/500 等）由框架直接处理响应，不记录日志
+        if ($e instanceof \Framework\Exception\HttpException) {
+            return;
+        }
         try {
             $context = array_merge(\Framework\Utils\LoggerContext::all(), [
                 'exception' => \get_class($e),
@@ -254,7 +258,7 @@ class ExceptionHandler
                 'trace'     => \App\Utils\PathHelper::relativeTrace($e->getTrace()),
             ]);
 
-            if (\defined('LOG_ABSOLUTE_PATH') && LOG_ABSOLUTE_PATH) {
+            if (\defined('LOG_ABSOLUTE_PATH') && \LOG_ABSOLUTE_PATH) {
                 $context['absolute_file'] = $e->getFile();
             }
 

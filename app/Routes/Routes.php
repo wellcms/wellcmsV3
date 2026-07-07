@@ -16,6 +16,8 @@ use Framework\Http\Router\Router;
 // 1. 公共路由 (Public)
 Router::get('/', [IndexController::class, 'index'], ['layout' => 'index']);
 Router::get('/403', [ErrorController::class, 'error403'], ['layout' => '403']);
+Router::get('/404', [ErrorController::class, 'error404'], ['layout' => '404']);
+Router::get('/500', [ErrorController::class, 'error500'], ['layout' => '500']);
 Router::get('/download/{id}', [UploadController::class, 'download']);
 
 // 外链安全跳转提示页（公开 GET，不附加登录或 CSRF 限制）
@@ -300,6 +302,14 @@ Router::group(['prefix' => '/admin'], function () {
             Router::get('/process/upgrade', [AdminIndex::class, 'processUpgrade']);
             Router::get('/upgrade/success', [AdminIndex::class, 'upgradeSuccess'], ['layout' => 'upgrade_success']);
         });
+
+        // 临时文件清理 (Temp Cleanup)
+        Router::get('/TempCleanup', [\App\Controllers\Admin\UploadController::class, 'index'], [
+            'layout' => 'temp_cleanup',
+        ]);
+        Router::post('/TempCleanup', [\App\Controllers\Admin\UploadController::class, 'tempCleanup'], [
+            'requiresCsrf' => ['enable' => true, 'ttl' => 3600],
+        ]);
     });
 });
 

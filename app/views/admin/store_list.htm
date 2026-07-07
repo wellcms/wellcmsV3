@@ -157,7 +157,13 @@
 						</a>
 						<?php } ?>
 						<?php } ?>
+						<?php if (1 === (int)($item["installed"] ?? 0) && empty($item["operation_links"]["upgrade"])) { ?>
+							<span class="px-3 py-1.5 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded-lg text-[9px] font-black uppercase tracking-widest">
+								<?php echo $view->get("language.installed");?>
+							</span>
+						<?php } ?>
 					</div>
+
 				</div>
 			</div>
 

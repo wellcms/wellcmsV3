@@ -138,7 +138,7 @@ LUA;
         $this->pushTaskToQueue($task);
 
         // P1: 若任务原状态为 failed，从死信队列中移除，避免幽灵数据
-        if ($task->status === 'failed') {
+        if ($task->status === \Framework\Scheduler\Task::STATUS_FAILED) {
             $this->removeFromFailedList($task->id);
         }
     }
@@ -195,9 +195,18 @@ LUA;
         $this->redis->hDel(self::HASH_KEY, $taskId);
     }
 
+    /**
+     * 移入失败队列（v1 模式）
+     *
+     * 注意：当 v2（PersistenceQueue）启用时，此方法不会被调用！
+     * v2 使用 PersistenceQueue::moveToFailedQueue() 写入 scheduler:dlq:*（ZSET）。
+     * 切换边界：v2 关闭 → 此方法写入 scheduler:queue:failed_list（List）；
+     *           v2 开启 → PersistenceQueue::moveToFailedQueue() 写入 scheduler:dlq:*（ZSET）。
+     * TaskManage::failedList() 已兼容两种模式。
+     */
     public function moveToFailedQueue(Task $task): void
     {
-        $task->status = 'failed';
+        $task->status = \Framework\Scheduler\Task::STATUS_FAILED;
         $task->updatedAt = time();
 
         $payload = json_encode($task->toArray(), JSON_UNESCAPED_UNICODE);
@@ -205,7 +214,7 @@ LUA;
             // 如果无法序列化，将简单记录部分字段
             $fallback = json_encode([
                 'id' => $task->id,
-                'status' => 'failed',
+                'status' => \Framework\Scheduler\Task::STATUS_FAILED,
                 'error' => 'serialize_error',
                 'updatedAt' => $task->updatedAt
             ], JSON_UNESCAPED_UNICODE);
@@ -223,7 +232,7 @@ LUA;
 
     public function moveToSuccessQueue(Task $task): void
     {
-        $task->status = 'success';
+        $task->status = \Framework\Scheduler\Task::STATUS_SUCCESS;
         $task->updatedAt = time();
 
         $payload = json_encode($task->toArray(), JSON_UNESCAPED_UNICODE);
@@ -234,8 +243,8 @@ LUA;
 
             // 记录到统计 ZSET
             $this->redis->zAdd('scheduler:stats:success', [$task->updatedAt => $task->id]);
-            // 保持 30 天统计数据
-            $this->redis->expire('scheduler:stats:success', 30 * 24 * 3600);
+            // 保持 3 天统计数据
+            $this->redis->expire('scheduler:stats:success', 259200); // 3 天
         }
 
         // 从主队列中移除

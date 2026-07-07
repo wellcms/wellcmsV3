@@ -7,6 +7,10 @@ declare(strict_types=1);
 
 namespace Framework\Scheduler;
 
+use Framework\Scheduler\EventBus;
+use Framework\Scheduler\WorkerCoordinator;
+use Framework\Scheduler\RecoveryEngine;
+
 /**
  * TaskExecutor：从队列中取任务、加锁、执行、重试、回调
  * $cacheManager = $container->get(\Framework\Cache\Interfaces\CacheInterface::class);
@@ -27,12 +31,24 @@ class TaskExecutor
     /** @var \Framework\Scheduler\Logger */
     protected $logger;
 
-    public function __construct(\Framework\Core\Container $container, \Framework\Cache\Drivers\RedisCache $redis, \Framework\Scheduler\Interfaces\TaskQueueInterface $queue, \Framework\Scheduler\Logger $logger)
+    /** @var EventBus|null */
+    private $eventBus;
+
+    /** @var WorkerCoordinator|null */
+    private $coordinator;
+
+    /** @var RecoveryEngine|null */
+    private $recoveryEngine;
+
+    public function __construct(\Framework\Core\Container $container, \Framework\Cache\Drivers\RedisCache $redis, \Framework\Scheduler\Interfaces\TaskQueueInterface $queue, \Framework\Scheduler\Logger $logger, ?EventBus $eventBus = null, ?WorkerCoordinator $coordinator = null, ?RecoveryEngine $recoveryEngine = null)
     {
         $this->container = $container;
         $this->redis = $redis;
         $this->queue = $queue;
         $this->logger = $logger;
+        $this->eventBus = $eventBus;
+        $this->coordinator = $coordinator;
+        $this->recoveryEngine = $recoveryEngine;
     }
 
     /**
@@ -53,6 +69,7 @@ class TaskExecutor
         $this->cleanupOrphanLocks();
 
         $processedCount = 0; // 仅统计实际处理的任务
+        $roundCounter = 0;   // 轮询计数器，用于周期性触发僵尸检测
         $this->log("TaskExecutor started. Target: Process {$maxRuns} tasks or hit {$memoryLimit}MB RAM.");
 
         while (!$this->shouldQuit) {
@@ -64,6 +81,16 @@ class TaskExecutor
 
                 // 更新心跳，标记调度器活跃
                 $this->redis->set('scheduler:stats:last_execution', time());
+
+                // P0 #3 修复: FPM 模式下每轮心跳
+                if ($this->coordinator !== null) {
+                    $this->coordinator->heartbeat();
+                }
+
+                // P1 #11 / v3.2 修复: FPM 模式下每 60 轮检测一次僵尸任务
+                if ($this->recoveryEngine !== null && $roundCounter++ % 60 === 0) {
+                    $this->recoveryEngine->handleZombies();
+                }
 
                 // 2. 获取任务
                 $task = $this->queue->pop();
@@ -79,7 +106,7 @@ class TaskExecutor
                 $processedCount++; // [Fix 2] 只有处理了任务才计数
 
             } catch (\Throwable $e) {
-                $this->log("Loop exception: " . $e->getMessage());
+                $this->log("Loop exception: " . $e->getMessage(), 'WARNING');
                 $this->sleep(1);
             }
         }
@@ -116,6 +143,15 @@ class TaskExecutor
 
     protected function executeTask(\Framework\Scheduler\Task $task): void
     {
+        // C-3 修复: 在加锁前发送事件
+        if ($this->eventBus !== null) {
+            $this->eventBus->emit('task.started', [
+                'id' => $task->id,
+                'class_name' => $task->className,
+                'worker_id' => gethostname() . ':' . getmypid(),
+            ]);
+        }
+
         // 获取锁（假定 $this->redis->lock 返回一个锁对象或 false）
         $lockKey = $this->lockPrefix . $task->id;
         $ttl = max(60, $task->timeout + 10);
@@ -135,14 +171,19 @@ class TaskExecutor
 
         // 标记任务进入运行状态（用于精确统计运行中任务）
         $this->redis->zAdd('scheduler:running:zset', [time() => $task->id]);
-        // 记录 PID 与 token，用于孤儿锁清理
-        $this->redis->hSet('scheduler:executor:pids', $task->id, $lockToken);
+        // 记录 PID 与 token，用于孤儿锁清理；显式以 {pid}:{token} 格式存储，确保 cleanupOrphanLocks 能正确解析
+        $this->redis->hSet('scheduler:executor:pids', $task->id, posix_getpid() . ':' . $lockToken);
 
         $startTime = microtime(true);
         $success = false;
         $errorMsg = '';
 
         $this->log("Task {$task->id} starts executing, P={$task->priority}, R={$task->retryCount}");
+
+        // 在调用任务前释放幂等锁，确保 handle() 中的 createTask() 自调度能成功
+        if (!empty($task->dedupeKey)) {
+            $this->redis->del('scheduler:dedupe:' . $task->dedupeKey);
+        }
 
         try {
             // 判断是否需要子进程超时保护
@@ -170,25 +211,25 @@ class TaskExecutor
         // 无论成功失败，都必须触发回调，且参数必须正确
         if ($success) {
             $this->log("Task {$task->id} succeeded, {$elapsed}s");
-            $task->status = 'success';
+            $task->status = \Framework\Scheduler\Task::STATUS_SUCCESS;
             $task->updatedAt = time();
 
             $this->queue->moveToSuccessQueue($task);
             // 记录执行时间到Hash，用于统计平均执行时间
             $this->redis->hSet('scheduler:execution_times', $task->id, (string)$elapsed);
             // 设置TTL避免无限增长
-            $this->redis->expire('scheduler:execution_times', 30 * 24 * 3600);
+            $this->redis->expire('scheduler:execution_times', 259200); // 3 天
 
             // 成功：传递 true
             $this->triggerCallback($task, true, $elapsed, '');
         } else {
-            $this->log("Task {$task->id} failed, {$elapsed}s, {$errorMsg}");
+            $this->log("Task {$task->id} failed, {$elapsed}s, {$errorMsg}", 'WARNING');
             // 失败：传递 false
             $this->triggerCallback($task, false, $elapsed, $errorMsg);
 
             // 失败重试逻辑
             if ($task->retryCount < $task->maxRetries) {
-                $task->status = 'retrying';
+                $task->status = \Framework\Scheduler\Task::STATUS_RETRYING;
                 // 指数退避
                 $base = max(1, $task->retryDelay ?: 1);
                 $cap  = 3600;
@@ -197,8 +238,8 @@ class TaskExecutor
                 $task->scheduledAt = time() + $exp + $jitter;
                 $this->queue->requeue($task);
             } else {
-                $task->status = 'failed';
-                $this->log("Task {$task->id} has reached the maximum number of retries and is moved to the failed queue.");
+                $task->status = \Framework\Scheduler\Task::STATUS_FAILED;
+                $this->log("Task {$task->id} has reached the maximum number of retries and is moved to the failed queue.", 'WARNING');
                 $this->queue->moveToFailedQueue($task);
             }
         }
@@ -210,11 +251,34 @@ class TaskExecutor
         $this->redis->zRem('scheduler:running:zset', $task->id);
         $this->redis->hDel('scheduler:executor:pids', $task->id);
 
-        // 仅在任务最终完成（成功 或 彻底失败进入死信队列）时释放幂等锁
-        if (!empty($task->dedupeKey)) {
-            if ($success || $task->retryCount >= $task->maxRetries) {
-                $this->redis->del('scheduler:dedupe:' . $task->dedupeKey);
-            }
+        // 幂等锁已在 invokeCallback 前释放，此处不再重复删除
+    }
+
+    /**
+     * #3 修复: 暴露队列引用（Swoole runLoopAsync 需要）
+     * @return \Framework\Scheduler\Interfaces\TaskQueueInterface
+     */
+    public function getQueue(): \Framework\Scheduler\Interfaces\TaskQueueInterface
+    {
+        return $this->queue;
+    }
+
+    /**
+     * #4 修复: 提供公共执行入口（Swoole runLoopAsync 需要，替代 protected executeTask）
+     * @param \Framework\Scheduler\Task $task
+     */
+    public function processTask(\Framework\Scheduler\Task $task): void
+    {
+        $this->executeTask($task);
+    }
+
+    /**
+     * #3 修复: Swoole 每个协程在 processTask 前重新连接 Redis，防止连接共享
+     */
+    public function reconnectRedis(): void
+    {
+        if (\Framework\Utils\Runtime::inCoroutine()) {
+            $this->redis->reconnect();
         }
     }
 
@@ -279,7 +343,7 @@ class TaskExecutor
                     (int)max(60, $task->timeout + 10)
                 );
                 if (!$renewed) {
-                    $this->log("Task {$task->id} lock renewal failed (token mismatch or lock lost).");
+                    $this->log("Task {$task->id} lock renewal failed (token mismatch or lock lost).", 'WARNING');
                     // 继续监控子进程，不中断，因为锁丢失不等于任务失败
                 }
                 $nextRenew = microtime(true) + $renewStep;
@@ -287,7 +351,7 @@ class TaskExecutor
 
             // 检查超时
             if ($timeout > 0 && (microtime(true) - $start) >= $timeout) {
-                $this->log("Task {$task->id} timed out. Terminating PID {$pid}...");
+                $this->log("Task {$task->id} timed out. Terminating PID {$pid}...", 'WARNING');
 
                 // 发送 SIGTERM 请求子进程退出
                 @posix_kill($pid, SIGTERM);
@@ -456,7 +520,7 @@ class TaskExecutor
             // 推入队列
             $this->queue->push($callbackTask);
         } catch (\Throwable $e) {
-            $this->log("Failed to queue callback: " . $e->getMessage());
+            $this->log("Failed to queue callback: " . $e->getMessage(), 'WARNING');
         }
     }
 

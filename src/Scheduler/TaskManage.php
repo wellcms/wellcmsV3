@@ -7,6 +7,9 @@ declare(strict_types=1);
 
 namespace Framework\Scheduler;
 
+use Framework\Scheduler\Task;
+use Framework\Utils\UuidHelper;
+
 // 任务管理类（新增/取消/查询/重试/死信等）需要安装redis扩展
 class TaskManage
 {
@@ -16,16 +19,186 @@ class TaskManage
     /** @var \Framework\Cache\Drivers\RedisCache */
     private $redis;
 
+    /** @var \Framework\Logger\LoggerInterface|null */
+    private $logger = null;
+
+    /** @var \Framework\Scheduler\Interfaces\TaskStorageInterface|null MySQL 存储层（v3.4 新增，cancelTasksByClass 用） */
+    private $taskStorage = null;
+
     /**
      * 最大参数长度
      * @var int
      */
     protected $maxArgLength = 4096;
 
+    /** @var array v2 工业级配置缓存（由 ServiceProvider 注入） */
+    private static $schedulerConfig = [];
+
+    /**
+     * 由 ServiceProvider 注入 v2 配置
+     *
+     * @param array $config
+     */
+    public static function setSchedulerConfig(array $config): void
+    {
+        self::$schedulerConfig = $config;
+    }
+
+    /**
+     * 检测 v2 dual_write 是否激活
+     *
+     * @return bool
+     */
+    public function isV2DualWriteActive(): bool
+    {
+        $cfg = self::$schedulerConfig;
+        return !empty($cfg['v2_enabled']) && !empty($cfg['dual_write']['enabled']);
+    }
+
     public function __construct(\Framework\Cache\Drivers\RedisCache $redis)
     {
         $this->queue = new \Framework\Scheduler\RedisTaskQueue($redis);
         $this->redis = $redis;
+    }
+
+    /**
+     * 可选注入日志器
+     *
+     * TaskManage 的构造函数仅接受 RedisCache（保持向后兼容），
+     * 调用方可在构造后通过此方法注入框架日志器。
+     * 注入后，内部 catch 块使用结构化日志代替 error_log() 兜底。
+     */
+    public function setLogger(\Framework\Logger\LoggerInterface $logger): void
+    {
+        $this->logger = $logger;
+    }
+
+    /**
+     * 注入 TaskStorageInterface（由 ServiceProvider 在 v2 模式下调用）
+     */
+    public function setTaskStorage(\Framework\Scheduler\Interfaces\TaskStorageInterface $storage): void
+    {
+        $this->taskStorage = $storage;
+    }
+
+    /**
+     * 注入装饰后的队列（如 PersistenceQueue），由容器在 ServiceProvider 中调用
+     */
+    public function setQueue(\Framework\Scheduler\Interfaces\TaskQueueInterface $queue): void
+    {
+        $this->queue = $queue;
+    }
+
+    /**
+     * 取消指定类的所有 pending/retrying 任务。
+     * 关闭配置时清理同类孤儿任务，确保 MySQL 无残留。
+     * 使用游标分页（id > ?），不走 OFFSET。
+     * 低频路径，不做复合索引。
+     *
+     * @param string $className
+     * @return int 取消的数量
+     */
+    public function cancelTasksByClass(string $className): int
+    {
+        if ($this->taskStorage === null || !$this->isV2DualWriteActive()) {
+            return 0;
+        }
+
+        $cancelled = 0;
+        try {
+            $lastId = '';
+            $limit = 500;
+            do {
+                // 游标分页查询：每次取游标之后 500 条
+                $tasks = $this->taskStorage->findPendingByClass($className, $lastId, $limit);
+                $count = count($tasks);
+                if ($count === 0) {
+                    break;
+                }
+                foreach ($tasks as $row) {
+                    $taskId = \Framework\Utils\UuidHelper::fromBinary($row['id']);
+
+                    // —— R2 修复：跳过正在 executor 中运行的任务 ——
+                    // executor 在 lock 成功后→zAdd(running_zset)→handle()。
+                    // 锁存在 = 任务已弹出队列、正在或即将被执行，不应取消。
+                    // 未锁 = 确认为 pending 队列中的待执行任务，安全取消。
+                    $lockKey = 'scheduler:lock:task:' . $taskId;
+                    if ($this->redis->exists($lockKey)) {
+                        continue;  // 任务正在 executor 中，跳过
+                    }
+                    // 辅助检测：已在 running_zset 中（锁可能恰好已释放但任务还在运行）
+                    $score = $this->redis->zScore('scheduler:running:zset', $taskId);
+                    if ($score !== false) {
+                        continue;  // 任务仍在运行中，跳过
+                    }
+                    // —— 检测结束 ——
+
+                    $this->cancelTask($taskId);
+                    $cancelled++;
+                }
+                if ($count > 0) {
+                    // 本页最后一条的 BINARY(16) id 转 UUID 串，作为下一页游标
+                    $lastId = \Framework\Utils\UuidHelper::fromBinary($tasks[$count - 1]['id']);
+                }
+            } while ($count === $limit);
+        } catch (\Throwable $e) {
+            if ($this->logger) {
+                $this->logger->error(sprintf(
+                    '[TaskManage] cancelTasksByClass(%s) failed: %s', $className, $e->getMessage()
+                ));
+            }
+        }
+
+        return $cancelled;
+    }
+
+    /**
+     * 检查某类 Job 是否有活跃任务
+     * #6 修复: 声明式调度自愈的依赖方法
+     *
+     * @param string $className
+     * @return bool true=有 pending/retrying/running 任务
+     */
+    public function hasActiveTaskOfClass(string $className): bool
+    {
+        // 检查 pending/retrying 队列（扫描范围扩大，避免遗漏长排队任务）
+        $ids = $this->redis->zRange('scheduler:queue:zset', 0, 10000);
+        if (!empty($ids)) {
+            $raws = $this->redis->hMGet('scheduler:queue:hash', $ids);
+            foreach ($raws as $raw) {
+                if (empty($raw)) {
+                    continue;
+                }
+                $task = json_decode($raw, true);
+                if (!empty($task) && ($task['className'] ?? '') === $className
+                    && in_array($task['status'] ?? -1, [Task::STATUS_PENDING, Task::STATUS_RETRYING], true)) {
+                    return true;
+                }
+            }
+        }
+
+        // 检查 running 队列（扫描 24 小时内活跃任务，避免长任务被误判为无活跃）
+        $runningIds = $this->redis->zRangeByScore('scheduler:running:zset', time() - 86400, time());
+        if (!empty($runningIds)) {
+            $raws = $this->redis->hMGet('scheduler:queue:hash', $runningIds);
+            foreach ($raws as $raw) {
+                if (empty($raw)) {
+                    continue;
+                }
+                $task = json_decode($raw, true);
+                if (!empty($task) && ($task['className'] ?? '') === $className
+                    && ($task['status'] ?? -1) === Task::STATUS_RUNNING) {
+                    // 验证锁活性：锁存在才是真正活跃的任务，避免僵尸任务阻塞 CDJ 播种
+                    $lockKey = $this->lockPrefix . ($task['id'] ?? '');
+                    if (!empty($task['id']) && $this->redis->exists($lockKey)) {
+                        return true;
+                    }
+                    // 锁已过期 → 僵尸任务，不视为活跃，继续检查下一条
+                }
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -42,20 +215,70 @@ class TaskManage
         }
     }
 
-    /** 后台新增任务（支持 scheduledAt / dedupeKey） */
-    public function createTask(array $payload): array
+    /**
+     * 轻量调度器脉冲检测
+     *
+     * 仅检查 Redis 连通性和调度器心跳时间戳，不调用 info()/zCard()/zCount()，
+     * 避免在加固 Redis 部署中因 ACL 限制或 rename-command 导致误判。
+     *
+     * 设计原则：
+     * - 永远只做最少的事：ping + get(last_execution)
+     * - 调用方可随时调用：FPM / CLI / 调度器内部均安全
+     * - 符合 Iron Law #25：catch 块必须记日志
+     *
+     * @param int $heartbeatThreshold  心跳超时阈值（秒），默认 600
+     * @return bool                    true 表示调度器存活且心跳在阈值内
+     */
+    public function isSchedulerAlive(int $heartbeatThreshold = 600): bool
+    {
+        try {
+            if (!$this->redis->ping()) {
+                return false;
+            }
+            $lastExec = $this->redis->get('scheduler:stats:last_execution');
+            if (!$lastExec) {
+                return false;
+            }
+            return (time() - (int)$lastExec) <= $heartbeatThreshold;
+        } catch (\Exception $e) {
+            // 使用 PHP 原生 error_log() 兜底（TaskManage 无容器依赖，不强制调用方注入日志器）
+            // 调用方可通过 setLogger() 注入框架日志器实现结构化日志
+            if ($this->logger) {
+                $this->logger->error(sprintf('[TaskManage::isSchedulerAlive] %s', $e->getMessage()));
+            } else {
+                error_log(sprintf('[TaskManage::isSchedulerAlive] %s', $e->getMessage()));
+            }
+            return false;
+        }
+    }
+
+    /**
+     * 创建任务（支持跳过 dedupeKey 检查）
+     *
+     * @param array $payload   任务负载
+     * @param bool  $ignoreDedupe 为 true 时跳过 dedupeKey 幂等检查（修复：
+     *                            scheduler 崩溃后 dedupeKey 残留导致 bootstrap 无法恢复）
+     * @return array
+     */
+    public function createTask(array $payload, bool $ignoreDedupe = false): array
     {
         try {
             $p = $this->normalizeAndValidate($payload);
 
-            // 幂等去重（可选）
-            if (!empty($p['dedupeKey'])) {
+            if (!empty($p['dedupeKey']) && !$ignoreDedupe) {
                 $k = 'scheduler:dedupe:' . $p['dedupeKey'];
                 // 使用 SET NX EX 原子操作保证幂等
                 // TTL 30 天：避免插件升级/重装等低频但跨天的场景下 dedupeKey 过早过期导致重复入队
                 if (!$this->redis->setNx($k, 1, 2592000)) {
                     return ['status' => 'duplicate', 'msg' => 'duplicate task'];
                 }
+            }
+
+            if ($ignoreDedupe && !empty($p['dedupeKey'])) {
+                // 强制模式：先删旧 dedupeKey 再重新设置
+                $k = 'scheduler:dedupe:' . $p['dedupeKey'];
+                $this->redis->del($k);
+                $this->redis->setNx($k, 1, 2592000);
             }
 
             $task = $this->makeTask($p);
@@ -125,12 +348,40 @@ class TaskManage
     }
 
     /** 死信列表（前 100 条） */
+    /**
+     * 获取失败任务列表
+     *
+     * 兼容两种失败队列模式：
+     * - v1（PersistenceQueue 未启用）：从 scheduler:queue:failed_list（List）读取
+     * - v2（PersistenceQueue 启用）：从 scheduler:dlq:max_retry / scheduler:dlq:other（ZSET）读取
+     * 新增消费失败队列的代码必须同时兼容两种格式。
+     */
     public function failedList(): array
     {
-        $arr = $this->redis->lRange('scheduler:queue:failed_list', 0, 99);
-        $items = array_map(function ($x) {
-            return json_decode($x, true);
-        }, $arr);
+        // v2 dual_write 关闭时回退旧 List
+        if (!$this->isV2DualWriteActive()) {
+            $arr = $this->redis->lRange('scheduler:queue:failed_list', 0, 99);
+            $items = array_map(function ($x) {
+                return json_decode($x, true);
+            }, $arr);
+            return ['status' => 'success', 'items' => $items];
+        }
+
+        // 新: 从 scheduler:dlq:* ZSET 读 ID → HASH 取详情
+        $ids = $this->redis->zRevRange('scheduler:dlq:max_retry', 0, 49);
+        $ids2 = $this->redis->zRevRange('scheduler:dlq:other', 0, 49);
+        $allIds = array_unique(array_merge($ids ?: [], $ids2 ?: []));
+        $allIds = array_slice($allIds, 0, 100);
+
+        $items = [];
+        if (!empty($allIds)) {
+            $raws = $this->redis->hMGet('scheduler:queue:hash', $allIds);
+            foreach ($allIds as $id) {
+                if (!empty($raws[$id])) {
+                    $items[] = json_decode($raws[$id], true);
+                }
+            }
+        }
         return ['status' => 'success', 'items' => $items];
     }
 
@@ -143,7 +394,7 @@ class TaskManage
             if (!$hit) continue;
             $task = Task::fromArray($hit, false);
             $task->retryCount = 0;
-            $task->status = 'pending';
+            $task->status = Task::STATUS_PENDING;
             $task->scheduledAt = time();
             $this->queue->push($task);
             $ok++;
@@ -176,7 +427,12 @@ class TaskManage
      */
     public function getFailedCount(): int
     {
-        return $this->redis->lLen('scheduler:queue:failed_list');
+        if (!$this->isV2DualWriteActive()) {
+            return $this->redis->lLen('scheduler:queue:failed_list');
+        }
+
+        return ($this->redis->zCard('scheduler:dlq:max_retry') ?: 0)
+             + ($this->redis->zCard('scheduler:dlq:other') ?: 0);
     }
 
     /**
@@ -204,6 +460,15 @@ class TaskManage
         $allTasks = [];
         $limit = 1000; // 总量限制，避免大数量下 Redis 阻塞
 
+        // API 传入的 status 字符串转 DB int 常量值，用于后续与 Redis 中的 int status 比较
+        $statusToInt = [
+            'pending'  => Task::STATUS_PENDING,
+            'retrying' => Task::STATUS_RETRYING,
+            'running'  => Task::STATUS_RUNNING,
+            'success'  => Task::STATUS_SUCCESS,
+            'failed'   => Task::STATUS_FAILED,
+        ];
+
         // 1. 获取主队列任务（pending + retrying）
         if ($status === 'pending' || $status === 'retrying' || $status === '') {
             $ids = $this->redis->zRange('scheduler:queue:zset', 0, $limit - 1);
@@ -229,8 +494,8 @@ class TaskManage
                     if ($raw) {
                         $task = json_decode($raw, true);
                         if ($task) {
-                            if (empty($task['status']) || !in_array($task['status'], ['pending', 'retrying', 'running'])) {
-                                $task['status'] = 'running';
+                            if (empty($task['status']) || !in_array($task['status'], [Task::STATUS_PENDING, Task::STATUS_RETRYING, Task::STATUS_RUNNING])) {
+                                $task['status'] = Task::STATUS_RUNNING;
                             }
                             $allTasks[] = $task;
                         }
@@ -241,35 +506,69 @@ class TaskManage
 
         // 3. 获取 Failed 任务
         if ($status === 'failed' || $status === '') {
-            $failedRaw = $this->redis->lRange('scheduler:queue:failed_list', 0, 499);
-            foreach ($failedRaw as $raw) {
-                $task = json_decode($raw, true);
-                if ($task) {
-                    $allTasks[] = $task;
+            if ($this->isV2DualWriteActive()) {
+                $failedIds = $this->redis->zRevRange('scheduler:dlq:max_retry', 0, 249);
+                $failedIds2 = $this->redis->zRevRange('scheduler:dlq:other', 0, 249);
+                $allFailed = array_unique(array_merge($failedIds ?: [], $failedIds2 ?: []));
+                if (!empty($allFailed)) {
+                    $raws = $this->redis->hMGet('scheduler:queue:hash', $allFailed);
+                    foreach ($allFailed as $id) {
+                        if (!empty($raws[$id])) {
+                            $task = json_decode($raws[$id], true);
+                            if ($task) {
+                                $allTasks[] = $task;
+                            }
+                        }
+                    }
+                }
+            } else {
+                $failedRaw = $this->redis->lRange('scheduler:queue:failed_list', 0, 499);
+                foreach ($failedRaw as $raw) {
+                    $task = json_decode($raw, true);
+                    if ($task) {
+                        $allTasks[] = $task;
+                    }
                 }
             }
         }
 
         // 4. 获取 Success 任务
         if ($status === 'success' || $status === '') {
-            $successRaw = $this->redis->lRange('scheduler:queue:success_list', 0, 499);
-            foreach ($successRaw as $raw) {
-                $task = json_decode($raw, true);
-                if ($task) {
-                    $allTasks[] = $task;
+            $successIds = $this->redis->zRevRange('scheduler:stats:success', 0, 499);
+            if (!empty($successIds)) {
+                $raws = $this->redis->hMGet('scheduler:queue:hash', $successIds);
+                foreach ($successIds as $id) {
+                    if (!empty($raws[$id])) {
+                        $task = json_decode($raws[$id], true);
+                        if ($task) {
+                            $allTasks[] = $task;
+                        }
+                    }
                 }
             }
         }
 
-        // 5. 若指定了具体状态，进行二次过滤
+        // 5. 按 ID 去重（同一条任务可能出现在多个队列中，保留第一个出现）
+        $seen = [];
+        $deduped = [];
+        foreach ($allTasks as $task) {
+            $tid = $task['id'] ?? '';
+            if ($tid === '' || isset($seen[$tid])) continue;
+            $seen[$tid] = true;
+            $deduped[] = $task;
+        }
+        $allTasks = $deduped;
+
+        // 6. 若指定了具体状态，进行二次过滤（$status 为 API 传入的字符串，转 int 与 Redis 数据比较）
         if ($status && in_array($status, ['pending', 'retrying', 'running', 'failed', 'success'])) {
-            $allTasks = array_filter($allTasks, function ($task) use ($status) {
-                return ($task['status'] ?? '') === $status;
+            $statusCode = $statusToInt[$status] ?? -1;
+            $allTasks = array_filter($allTasks, function ($task) use ($statusCode) {
+                return ($task['status'] ?? -1) === $statusCode;
             });
             $allTasks = array_values($allTasks);
         }
 
-        // 5. 关键词过滤
+        // 7. 关键词过滤
         if ($keywords) {
             $kw = mb_strtolower($keywords);
             $allTasks = array_filter($allTasks, function ($task) use ($kw) {
@@ -279,14 +578,14 @@ class TaskManage
             });
         }
 
-        // 6. 排序 (按更新时间降序)
+        // 8. 排序 (按更新时间降序)
         usort($allTasks, function ($a, $b) {
             $ta = $a['updatedAt'] ?? $a['createdAt'] ?? 0;
             $tb = $b['updatedAt'] ?? $b['createdAt'] ?? 0;
             return (int)$tb - (int)$ta;
         });
 
-        // 7. 分页处理
+        // 9. 分页处理
         $total = count($allTasks);
         $offset = ($page - 1) * $pageSize;
         $items = array_slice($allTasks, $offset, $pageSize);
@@ -307,27 +606,51 @@ class TaskManage
     {
         $health = [
             'redis_connected' => false,
-            'queue_size' => 0,
-            'memory_usage' => '0%',
-            'last_execution' => 0,
-            'errors_last_hour' => 0
+            'queue_size'      => 0,
+            'memory_usage'    => '0%',
+            'last_execution'  => 0,
+            'errors_last_hour'=> 0,
         ];
 
         try {
-            // 检查 Redis 连接
+            // 第一组：连通性与队列（基础指标）
             $health['redis_connected'] = $this->redis->ping();
+            $health['queue_size']      = $this->getPendingCount();
 
-            // 队列大小
-            $health['queue_size'] = $this->getPendingCount();
+            // 第二组：内存信息（info() 可能被 ACL 限制，独立 try-catch）
+            $health['memory_usage'] = $this->getMemoryUsage();
 
-            // 内存使用情况
+            // 第三组：调度器心跳（核心指标，与 info() 解耦）
+            $lastExec = $this->redis->get('scheduler:stats:last_execution');
+            $health['last_execution'] = $lastExec ? (int)$lastExec : 0;
+
+            // 第四组：错误统计
+            $hourAgo = time() - 3600;
+            $errorCount = $this->redis->zCount('scheduler:stats:errors', $hourAgo, time());
+            $health['errors_last_hour'] = $errorCount ?: 0;
+        } catch (\Exception $e) {
+            $health['error'] = $e->getMessage();
+            $health['memory_usage'] = '0%';
+        }
+
+        return $health;
+    }
+
+    /**
+     * 内存使用率（从 Redis info 计算，可能被 ACL 限制）
+     * 独立 try-catch，失败不影响其他健康指标
+     */
+    private function getMemoryUsage(): string
+    {
+        try {
             $info = $this->redis->info();
             $usedMemory = (int)($info['used_memory'] ?? 0);
-            $maxMemory = (int)($info['maxmemory'] ?? 0);
+            $maxMemory  = (int)($info['maxmemory'] ?? 0);
+
             if ($maxMemory > 0 && $usedMemory > 0) {
-                $health['memory_usage'] = min(100, round($usedMemory / $maxMemory * 100)) . '%';
-            } elseif ($usedMemory > 0) {
-                // 未设置 maxmemory，尝试读取系统总内存（Linux）
+                return min(100, round($usedMemory / $maxMemory * 100)) . '%';
+            }
+            if ($usedMemory > 0) {
                 $memTotal = 0;
                 if (is_readable('/proc/meminfo')) {
                     $memInfo = file_get_contents('/proc/meminfo');
@@ -336,29 +659,16 @@ class TaskManage
                     }
                 }
                 if ($memTotal > 0) {
-                    $health['memory_usage'] = min(100, round($usedMemory / $memTotal * 100)) . '%';
-                } else {
-                    $health['memory_usage'] = '0%';
+                    return min(100, round($usedMemory / $memTotal * 100)) . '%';
                 }
-            } else {
-                $health['memory_usage'] = '0%';
             }
-
-            // 最后执行时间
-            $lastExec = $this->redis->get('scheduler:stats:last_execution');
-            $health['last_execution'] = $lastExec ? (int)$lastExec : 0;
-
-            // 最近1小时错误数
-            $hourAgo = time() - 3600;
-            $errorCount = $this->redis->zCount('scheduler:stats:errors', $hourAgo, time());
-            $health['errors_last_hour'] = $errorCount ?: 0;
         } catch (\Exception $e) {
-            // 记录错误但不抛出
-            $health['error'] = $e->getMessage();
-            $health['memory_usage'] = '0%';
+            // 加固型 Redis 部署不支持 info()，静默降级
+            if ($this->logger) {
+                $this->logger->warning(sprintf('[TaskManage::getMemoryUsage] %s', $e->getMessage()));
+            }
         }
-
-        return $health;
+        return '0%';
     }
 
     /**
@@ -463,7 +773,7 @@ class TaskManage
             }
 
             // 确保任务是 pending 或 retrying 状态才能调整优先级
-            $adjustableStatuses = ['pending', 'retrying'];
+            $adjustableStatuses = [Task::STATUS_PENDING, Task::STATUS_RETRYING];
             if (!in_array($taskData['status'], $adjustableStatuses)) {
                 return [
                     'status' => 'error',
@@ -518,15 +828,29 @@ class TaskManage
 
     private function findInFailed(string $id): ?array
     {
+        // v2: 直接从 Hash 查找任务（替代原 failed_list 遍历）
+        if ($this->isV2DualWriteActive()) {
+            $raw = $this->redis->hGet('scheduler:queue:hash', $id);
+            if (!$raw) {
+                return null;
+            }
+            $task = json_decode($raw, true);
+            return is_array($task) ? $task : null;
+        }
+
         // 限制遍历范围，避免遍历整个失败队列（可能非常大）
         // 只搜索前 1000 条记录，超过这个数量的任务不应该频繁重试
         $arr = $this->redis->lRange('scheduler:queue:failed_list', 0, 999);
         foreach ($arr as $row) {
             $obj = json_decode($row, true);
-            if (($obj['id'] ?? '') === $id) return $obj;
+            if (($obj['id'] ?? '') === $id) {
+                return $obj;
+            }
         }
         return null;
     }
+
+
 
     /**
      * 根据时间段获取开始时间戳
@@ -619,6 +943,9 @@ class TaskManage
         $p['retryDelay'] = \Framework\Scheduler\Task::sanitizeRetryDelay($p['retryDelay'] ?? 1);
         $p['timeout'] = \Framework\Scheduler\Task::sanitizeTimeout($p['timeout'] ?? 0);
         $p['callbackUrl'] = \Framework\Scheduler\Task::sanitizeUrl($p['callbackUrl'] ?? '');
+        if ($p['callbackUrl'] !== '' && $this->isPrivateUrl($p['callbackUrl'])) {
+            throw new \InvalidArgumentException('Callback URL must not point to private network');
+        }
         $p['callbackMethod'] = \Framework\Scheduler\Task::sanitizeHttpMethod($p['callbackMethod'] ?? 'POST');
         $p['status'] = \Framework\Scheduler\Task::sanitizeStatus($p['status'] ?? 'pending');
 
@@ -640,7 +967,7 @@ class TaskManage
 
     private function makeTask(array $p): \Framework\Scheduler\Task
     {
-        $id = !empty($p['id']) ? (string)$p['id'] : $this->uuidV4();
+        $id = !empty($p['id']) ? (string)$p['id'] : UuidHelper::generate(false);
         $p['args']['_task_id'] = $id; // 自动传入任务ID，方便回调使用
         $p['args']['_session_id'] = $id; // 自动传入任务ID，方便回调使用
         $t = new \Framework\Scheduler\Task(
@@ -657,15 +984,6 @@ class TaskManage
         );
         $t->scheduledAt = $p['scheduledAt'];
         return $t;
-    }
-
-    private function uuidV4(): string
-    {
-        // 兼容 PHP 7.2 & 足够随机
-        $data = random_bytes(16);
-        $data[6] = chr((ord($data[6]) & 0x0f) | 0x40);
-        $data[8] = chr((ord($data[8]) & 0x3f) | 0x80);
-        return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($data), 4));
     }
 
     /** 检查 callbackUrl 是否指向内网 */

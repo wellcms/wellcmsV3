@@ -103,6 +103,14 @@ class ErrorHandlerMiddleware implements \Framework\Http\Interfaces\MiddlewareInt
     {
         $this->logThrowable($e);
 
+        // 内层中间件（RequestProcessor/Language/Session）的 finally 可能已经 pop 了 RequestStack，
+        // 但 ErrorResponseBuilder 创建 ErrorController/MessageController 时依赖 RequestStack::getCurrent()。
+        // 因此错误处理期间需要确保 RequestStack 中有当前请求。
+        $needPush = \Framework\Http\Psr7\RequestStack::getCurrent() === null;
+        if ($needPush) {
+            \Framework\Http\Psr7\RequestStack::push($request);
+        }
+
         try {
             $builder = $this->getErrorBuilder();
             $response = $builder->build($e, $request);
@@ -127,6 +135,10 @@ class ErrorHandlerMiddleware implements \Framework\Http\Interfaces\MiddlewareInt
                     'message'   => $this->debug ? $e->getMessage() : 'Internal Server Error',
                     'timestamp' => time(),
                 ], 500);
+        } finally {
+            if ($needPush) {
+                \Framework\Http\Psr7\RequestStack::pop();
+            }
         }
 
         $response = $this->addExceptionHeaders($response, $e);
@@ -147,6 +159,10 @@ class ErrorHandlerMiddleware implements \Framework\Http\Interfaces\MiddlewareInt
 
     protected function logThrowable(\Throwable $e): void
     {
+        // HTTP 状态码异常由框架直接处理响应，不记录日志
+        if ($e instanceof \Framework\Exception\HttpException) {
+            return;
+        }
         try {
             $logger = $this->container->get(\Framework\Logger\LoggerInterface::class);
             $level = ($e instanceof \Framework\Exception\ExceptionInterface && $e->getStatusCode() < 500)
@@ -159,7 +175,7 @@ class ErrorHandlerMiddleware implements \Framework\Http\Interfaces\MiddlewareInt
                 'type' => \get_class($e),
             ];
 
-            if (\defined('LOG_ABSOLUTE_PATH') && LOG_ABSOLUTE_PATH) {
+            if (\defined('LOG_ABSOLUTE_PATH') && \LOG_ABSOLUTE_PATH) {
                 $context['absolute_file'] = $e->getFile();
             }
 

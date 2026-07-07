@@ -2706,7 +2706,11 @@ class WellRTE {
     if (htmlData && /<img\s+[^>]*src\s*=\s*['"]http/i.test(htmlData)) {
       e.preventDefault();
       this.ensureCursorOutsideProtected();
-      document.execCommand("insertHTML", false, htmlData);
+      // 工业级修复：粘贴内容经过 sanitizeHtml 结构淘洗后，再剥离所有 style 属性
+      const cleanHtml = this.sanitizeHtml(htmlData)
+        .replace(/\sstyle\s*=\s*"[^"]*"/gi, '')
+        .replace(/\sstyle\s*=\s*'[^']*'/gi, '');
+      document.execCommand("insertHTML", false, cleanHtml);
       self.updateSource();
       return;
     }
@@ -2754,6 +2758,18 @@ class WellRTE {
         return;
       }
       this.insertLinkCard(text.trim());
+      return;
+    }
+
+    // 5. Generic HTML paste — 兜底路径：外来 HTML 剥离所有 style 属性后插入
+    if (htmlData) {
+      e.preventDefault();
+      this.ensureCursorOutsideProtected();
+      const cleanHtml = this.sanitizeHtml(htmlData)
+        .replace(/\sstyle\s*=\s*"[^"]*"/gi, '')
+        .replace(/\sstyle\s*=\s*'[^']*'/gi, '');
+      document.execCommand("insertHTML", false, cleanHtml);
+      self.updateSource();
       return;
     }
   }
@@ -3080,6 +3096,7 @@ class WellRTE {
       "footer",
       "figure",
       "figcaption",
+      "font",
     ]);
     const RESERVED_IDS = new Set([
       "location", "closed", "frames", "length", "name", "opener", "status",
@@ -3098,7 +3115,17 @@ class WellRTE {
       "data-userid",
       "data-id",
       "data-ref",
+      "data-well-img",
       "contenteditable",
+    ]);
+
+    // CSS 属性白名单：仅保留编辑器自身写入的样式属性，其余外来 style 被剥离
+    const RAW_CSS_ALLOWLIST = new Set([
+      'text-align',    // 图片对齐 + 段落对齐工具栏 (execCommand justifyLeft/Center/Right)
+      'font-family',   // 字体选择器 (Chrome execCommand fontName 产生 <span style="font-family:...">)
+      'font-size',     // 字号选择器 + 斜杠命令字号 (L1453/L2400)
+      'width',         // 图片缩放 (L967) + 上传模板 (L2772)
+      'height',        // 图片等比缩放兼容
     ]);
 
     function clean(node) {
@@ -3131,11 +3158,29 @@ class WellRTE {
                 ) {
                   child.removeAttribute(name);
                 }
-                if (
-                  name === "style" &&
-                  /url\s*\(|expression|javascript:|vbscript:|@import/i.test(val)
-                ) {
-                  child.removeAttribute(name);
+                if (name === "style") {
+                  // 工业级 CSS 属性白名单 + XSS 纵深防御
+                  if (/url\s*\(|expression|javascript:|vbscript:|@import/i.test(val)) {
+                    child.removeAttribute(name);
+                  } else {
+                    const kept = [];
+                    const decls = attr.value.split(';');
+                    for (let d = 0; d < decls.length; d++) {
+                      const decl = decls[d].trim();
+                      if (!decl) continue;
+                      const ci = decl.indexOf(':');
+                      if (ci === -1) continue;
+                      const prop = decl.substring(0, ci).trim().toLowerCase();
+                      if (RAW_CSS_ALLOWLIST.has(prop)) {
+                        kept.push(decl);
+                      }
+                    }
+                    if (kept.length === 0) {
+                      child.removeAttribute(name);
+                    } else {
+                      child.setAttribute('style', kept.join('; '));
+                    }
+                  }
                 }
               }
             });

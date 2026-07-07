@@ -83,7 +83,7 @@ class ThrottleMiddleware implements \Framework\Http\Interfaces\MiddlewareInterfa
         try {
 
             $rateConf = $this->sessionConfig['rate_limit'] ?? [];
-            $this->urlPrefixAllow = $rateConf['url_prefix_allow'] ?? ['admin', 'my'];
+            $this->urlPrefixAllow = $rateConf['url_prefix_allow'] ?? ['admin', 'my', 'api'];
             $this->staticExt = $rateConf['static_ext'] ?? ['css' => 1, 'js' => 1, 'png' => 1, 'jpg' => 1, 'jpeg' => 1, 'gif' => 1, 'svg' => 1, 'woff' => 1, 'woff2' => 1];
             $this->staticPathWhitelist = $rateConf['path_whitelist'] ?? ['app/views', 'plugins', 'themes', 'storage/upload'];
             $this->staticContentTypeWhitelist = $rateConf['content_type_whitelist'] ?? ['image/jpeg', 'image/png', 'image/gif', 'image/svg+xml', 'image/webp', 'text/css', 'application/javascript', 'font/woff', 'font/woff2'];
@@ -268,11 +268,14 @@ class ThrottleMiddleware implements \Framework\Http\Interfaces\MiddlewareInterfa
 
             return $handler->handle($request);
         } catch (\Throwable $e) {
-            if (!($e instanceof \Framework\Exception\Http\NotFoundException)) {
-                $this->logger->error("Error in " . get_class($this) . ": " . $e->getMessage(), ['exception' => $e]);
+            // 路由未命中属于正常 HTTP 语义，不应被限流层接管
+            if ($e instanceof \Framework\Exception\Http\NotFoundException) {
+                throw $e;
             }
 
-            if (\defined('DEBUG') && DEBUG >= 2) {
+            $this->logger->error("Error in " . get_class($this) . ": " . $e->getMessage(), ['exception' => $e]);
+
+            if (\defined('DEBUG') && \DEBUG >= 2) {
                 throw $e;
             }
 

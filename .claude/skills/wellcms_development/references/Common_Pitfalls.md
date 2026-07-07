@@ -1,7 +1,7 @@
 # 常见陷阱与教训 (Common Pitfalls & Lessons)
 
 **文档位置**: `.agent/skills/wellcms_development/references/Common_Pitfalls.md`  
-**最后更新**: 2026-05-14
+**最后更新**: 2026-06-28
 
 ---
 
@@ -145,17 +145,17 @@ $this->pluginService->update(['id' => $id], ['downloads' => ['+=' => 1]]);
 ```php
 // ✅ 增量：键名以 '+' 结尾
 $this->pluginService->update(['id' => $id], ['downloads+' => 1]);
-// 生成 SQL: UPDATE ... SET `downloads` = `downloads` + ? WHERE `id` = ?
+// 生成 SQL: UPDATE store_server_plugin SET `downloads` = `downloads` + ? WHERE `id` = ?
 
 // ✅ 减量：键名以 '-' 结尾
 $this->pluginService->update(['id' => $id], ['stock-' => 1]);
-// 生成 SQL: UPDATE ... SET `stock` = `stock` - ? WHERE `id` = ?
+// 生成 SQL: UPDATE store_server_plugin SET `stock` = `stock` - ? WHERE `id` = ?
 ```
 
 **关键认知**:
 - 所有方言编译器（MySQL / PgSQL / SQLite / SqlServer）均遵循相同的键名后缀规则
 - `paramsValueEscape()` 只处理 `int` 和 `string`，数组会被强转为 `"Array"` 字符串
-- `bulkUpdate` 同理：行数据中使用 `'views+' => 5` 而非 `['views' => ['+=' => 5]]`
+- `bulkUpdate` 同理：行数据中使用 `'views+' => 5` 而非嵌套数组
 - 此错误在 `download()`、`purchase()` 等高频写操作中被反复踩中，必须形成肌肉记忆
 
 **检查清单**:
@@ -168,312 +168,6 @@ $this->pluginService->update(['id' => $id], ['stock-' => 1]);
 *本文档由 AGENT.md 分离而来，用于集中记录开发和维护过程中的常见陷阱。*
 
 ---
-
-## 教训 #10: 插件控制器严禁定义构造函数，严禁声明返回类型为具体 Service 的私有 getter
-
-**背景**: WellCMS 3.0 的 DI 容器通过 `LazyLoadingProxy` 实现 Service 的延迟加载。当控制器通过构造函数注入 Service 时，容器传递的是 `LazyLoadingProxy` 实例而非真实 Service 对象，导致 PHP `TypeError`（期望 `ConcreteService` 但收到 `LazyLoadingProxy`）。**同理，即使不在构造函数中注入，只要在控制器内部定义返回类型为具体 Service 的私有 getter（如 `private function getPageAdminService(): PageAdminService`），`$this->container->get()` 在特定场景下仍可能返回 `LazyLoadingProxy`，触发相同的 `TypeError`。**
-
-**错误模式** (严禁):
-```php
-// ❌ 错误 1：构造函数注入，运行时 TypeError
-class PageController extends BaseController
-{
-    private $pageService;
-
-    public function __construct(
-        ServerRequestInterface $request,
-        // ... 11 个父类参数 ...,
-        PageService $pageService    // ← 容器传入 LazyLoadingProxy，类型冲突！
-    ) {
-        parent::__construct(...);
-        $this->pageService = $pageService;
-    }
-}
-
-// ❌ 错误 2：私有 getter 声明返回类型，LazyLoadingProxy 无法通过类型检查
-class PageAdminController extends BaseController
-{
-    private function getPageAdminService(): PageAdminService
-    {
-        return $this->container->get(PageAdminService::class); // ← 可能返回 LazyLoadingProxy
-    }
-
-    public function index($request): ResponseInterface
-    {
-        $list = $this->getPageAdminService()->getList(); // TypeError!
-    }
-}
-```
-
-**正确模式** (必须):
-```php
-// ✅ 正确：完全继承 BaseController，不定义 __construct
-class PageController extends BaseController
-{
-    use \App\Traits\Frontend\FrontendTrait;
-
-    public function show(ServerRequestInterface $request): ResponseInterface
-    {
-        // 在 Action 方法内直接内联获取 Service，不包装为私有方法
-        $pageService = $this->container->get(PageService::class);
-        $page = $pageService->findBySlug($slug, $namespace);
-        // ...
-    }
-}
-
-// ✅ 正确：后台控制器直接内联调用
-class PageAdminController extends BaseController
-{
-    public function index($request): ResponseInterface
-    {
-        $list = $this->container->get(PageAdminService::class)->getList();
-        // ...
-    }
-}
-```
-
-**关键认知**:
-- `BaseController` 已通过构造函数注入 `$this->container`，子类直接使用
-- `$this->container->get(ServiceClass::class)` 返回真实 Service 实例（非 Proxy）
-- **但在存在循环依赖或延迟加载场景时，容器会返回 `LazyLoadingProxy`。此时若方法声明了具体 Service 的返回类型，PHP 严格类型检查会直接抛 `TypeError`**
-- 参考实现：`plugins/well_forum/Controllers/Admin/PermissionAdminController.php` 直接 `$this->container->get(ForumCategoryService::class)->read(...)`，无包装方法
-- Service 和 Model 层可以正常使用构造函数注入（无 LazyLoadingProxy 问题）
-
-**检查清单**:
-- [ ] 插件控制器无 `__construct` 定义
-- [ ] 插件控制器**无**返回类型为具体 Service 的私有 getter 方法
-- [ ] 所有插件 Service 直接在 Action 内通过 `$this->container->get()` 获取并链式调用
-- [ ] Service/Model 层使用正常的构造函数注入
-
----
-
-## 教训 #11: Hook 文件注释中严禁包含 `<?php` 字面量
-
-**背景**: `Compile::sanitizeHookCode()` 在移除 `<?php exit;` 头后，会检查剩余代码中是否包含 `<?` 开头的 PHP 标签。如果注释中包含 `<?php` 字面量（如 `// 必须以 <?php exit; 开头`），安全检测会判定为残留标签，返回 `null` 并跳过该 Hook 文件（"Malformed hook file skipped"）。
-
-**错误模式** (严禁):
-```php
-<?php exit;
-// 所有 Hook 文件必须 <?php exit; 开头     ← 注释中的 <?php 触发安全拦截
-// 路由声明对齐 CompiledRouter 兼容格式
-
-use Framework\Http\Router\Router;
-Router::get('/docs/{slug}', ...);
-```
-
-**正确模式** (必须):
-```php
-<?php exit;
-// 所有 Hook 文件以 exit; 开头（sanitize 会安全移除）
-// 注意：注释中不能包含 PHP 开始标签字面量
-
-\Framework\Http\Router\Router::get('/docs/{slug}', ...);
-```
-
-**关键认知**:
-- `sanitizeHookCode()` 的正则 `#<\?(php|=|\s)#i` 会匹配注释中的 `<?php`
-- 安全检测是 AST 级别的，无法区分注释和代码
-- 不要在 Hook 文件的任何位置写 `<?`（除了第一行的 `<?php exit;`）
-
-**检查清单**:
-- [ ] Hook 文件中第一行之外无 `<?php` 或 `<?` 出现
-- [ ] 注释中无 PHP 标签字面量
-
----
-
-## 教训 #12: Hook 文件必须使用全限定类名（FQCN），严禁 `use` 语句
-
-**背景**: Hook 文件内容在编译阶段物理注入到主程序文件（如 `app/Routes/Routes.php`）。主程序文件已有自己的 `use` 导入（如 `use Framework\Http\Router\Router`）。Hook 文件中的 `use` 语句被直接注入后，与主程序的 `use` 重复声明，导致 PHP Fatal Error（"Cannot use ... as Router because the name is already in use"）。
-
-**错误模式** (严禁):
-```php
-<?php exit;
-
-// ❌ 错误：use 语句与核心 Routes.php 的 use 冲突
-use Framework\Http\Router\Router;
-use Plugins\well_page\Controllers\Frontend\PageController;
-
-Router::get('/docs/{slug}', [PageController::class, 'show']);
-```
-
-**正确模式** (必须):
-```php
-<?php exit;
-
-// ✅ 正确：全限定类名，无 use 语句
-\Framework\Http\Router\Router::get('/docs/{slug}', [
-    \Plugins\well_page\Controllers\Frontend\PageController::class, 'show'
-]);
-```
-
-**关键认知**:
-- Hook 注入是物理文本拼接，不经过 PHP 的导入重解析
-- 全部使用 FQCN（以 `\` 开头的完整命名空间路径）
-- 类名常量 `::class` 也需要 FQCN（`\Plugins\...\PageController::class`）
-- 此规则适用于所有注入到主程序的 Hook 文件
-
-**检查清单**:
-- [ ] Hook 文件中无 `use` 语句
-- [ ] 所有类引用以 `\` 开头的全限定名
-- [ ] `::class` 常量也使用 FQCN
-
----
-
-## 教训 #13: `BaseModel::read()` 返回单行，`BaseModel::find()` 返回多行——不可混用
-
-**背景**: `BaseModel::read()` 内部调用 `PdoDriver::queryOne()`（`->limit(1)->fetch()`），返回**单行关联数组**（如 `['id' => 1, 'title' => '...']`）。`BaseModel::find()` 内部调用 `PdoDriver::query()`，返回**多行数组**（如 `[['id' => 1], ['id' => 2]]`）。两者返回结构不同，混用会导致 "Undefined array key 0" 或 "Trying to access array offset on value of type int"。
-
-**错误模式** (严禁):
-```php
-// ❌ 错误 1：用 read() 查多行
-$all = $this->model->read($condition, $orderBy);
-foreach ($all as $row) { ... }          // 遍历单个关联数组的键！
-
-// ❌ 错误 2：对 read() 结果用 [0] 取第一条
-$result = $this->model->read($condition);
-$page = $result[0];                     // read() 已返回单行！
-```
-
-**正确模式** (必须):
-```php
-// ✅ 正确：单行查询用 read()
-$result = $this->model->read(['slug' => 'manual', ...]);
-if (empty($result)) throw new NotFoundException();
-$page = $result;                         // 直接使用，不需要 [0]
-
-// ✅ 正确：多行查询用 find()
-$items = $this->model->find($condition, $orderBy, 1, 20);
-foreach ($items as $row) { ... }
-```
-
-**关键认知**:
-- `read()` → `queryOne()` → 单行关联数组
-- `find()` → `query()` → 多行（索引数组套关联数组）
-- `count()` → `queryCount()` → 整数
-- 写代码前先确认需要单行还是多行
-
-**检查清单**:
-- [ ] 单行查询使用 `read()`
-- [ ] 多行查询使用 `find()`
-- [ ] `read()` 结果直接使用，不用 `[0]`
-- [ ] `find()` 结果用 foreach 遍历
-
----
-
-## 教训 #14: `requiresUserPerm` meta 必须包含 `'enable' => true`
-
-**背景**: `UserPermResolver::supports()` 的判定条件要求 `true === $value['enable']`。缺少 `'enable' => true` 时，`supports()` 返回 `false`，权限中间件不会被调度，路由无权限保护。
-
-**错误模式** (严禁):
-```php
-// ❌ 错误：缺少 enable => true，中间件不生效
-Router::group(['prefix' => '/admin', 'meta' => [
-    'requiresUserPerm' => ['perm' => 'well_page.manage']
-]], function () { ... });
-```
-
-**正确模式** (必须):
-```php
-// ✅ 正确：包含 enable => true
-Router::group(['prefix' => '/admin', 'meta' => [
-    'requiresUserPerm' => ['enable' => true, 'role' => ['administer', 'well_page_manage']]
-]], function () { ... });
-```
-
-**关键认知**:
-- `role` 数组列名对应 `well_group` 表的字段
-- 自定义权限列必须在 `install.php` 中通过 `ALTER TABLE` + `GroupService::update` 创建
-
-**检查清单**:
-- [ ] 所有 `requiresUserPerm` 配置包含 `'enable' => true`
-- [ ] `role` 列名在 `well_group` 表中存在
-
----
-
-## 教训 #15: 插件 `config.json` 必须包含 `install`/`uninstall` 声明
-
-**背景**: 插件系统通过 `config.json` 定位安装/卸载入口。缺少声明时，即使文件存在，框架也不会执行它。
-
-**错误模式** (严禁):
-```json
-{ "name": "well_page", "version": "1.0.0" }
-```
-
-**正确模式** (必须):
-```json
-{ "name": "well_page", "version": "1.0.0",
-  "install": {"file": "install.php"},
-  "uninstall": {"file": "uninstall.php"} }
-```
-
-**检查清单**:
-- [ ] 有安装逻辑的插件包含 `"install": {"file": "install.php"}`
-- [ ] 有卸载逻辑的插件包含 `"uninstall": {"file": "uninstall.php"}`
-
----
-
-## 教训 #16: Asset 路径必须使用相对路径，禁止绝对路径
-
-**背景**: 资产聚合框架将 `assets` 路径视为相对于插件目录的相对路径。绝对路径会导致拼接错误，资产不加载。
-
-**错误模式** (严禁):
-```json
-{ "assets": { "global": { "js": ["/plugins/well_page/static/js/page.js"] } } }
-```
-
-**正确模式** (必须):
-```json
-{ "assets": { "global": { "js": ["static/js/page.js"] } } }
-```
-
-**检查清单**:
-- [ ] `assets` 中的路径不以 `/` 开头
-- [ ] 路径相对于插件根目录
-
----
-
-*最后更新: 2026-06-06 - 新增教训 #10 ~ #16（控制器注入/Hook 安全/BaseModel 语义/权限/配置/资产路径）*
-
----
-
-## 教训 #17: 插件语言包审计必须同时检查 `language.php` 和 `admin.php`
-
-**背景**: WellCMS 3.0 的 `LanguageManager` 采用严格的前后台分离加载策略：
-- 后台控制器通过 `AdminTrait` 调用 `loadAdmin($locale)`，加载的是 **`admin.php`**
-- 前台控制器通过 `FrontendTrait` 调用 `loadLanguage($locale)`，加载的是 **`language.php`**
-
-`Compile::compileLanguage()` 在压平语言缓存时，按 `core → plugins → themes → hooks` 四层合并，但每层只加载对应 `$type` 的文件（`admin` 或 `language`）。**插件目录下只有 `language.php` 不等于语言包完整**——后台编译缓存中完全不会包含 `language.php` 的任何键。
-
-**错误模式** (严禁):
-```php
-// ❌ 错误：审计时只看 language.php，得出"无需补全"
-plugins/well_page/Language/zh/language.php  // 包含 well_page_menu ✅
-plugins/well_page/Language/en/language.php  // 包含 well_page_menu ✅
-// 结论：语言包完整 ← 严重错误！后台加载的是 admin.php
-```
-
-**正确模式** (必须):
-```php
-// ✅ 正确：审计时必须同时检查 language.php 和 admin.php
-plugins/well_page/Language/zh/language.php  // 前台键
-plugins/well_page/Language/zh/admin.php     // 后台键
-
-// 对于同时被前后台调用的键（如 well_page_homepage_hero_title 在 setLanguageData_end 钩子中），
-// 两个文件都必须包含该键，确保任意场景下编译缓存都有值。
-```
-
-**关键认知**:
-- `language.php` 和 `admin.php` 是**物理隔离**的两个编译入口，不存在自动 fallback
-- 后台 Hook（如 `app_Trait_AdminTrait_getAdminNavigation_after.php`）调用的键必须在 `admin.php` 中定义
-- 前台控制器（如 `PageController::list()`）调用的键必须在 `language.php` 中定义
-- 跨前后台共用的键（如首页文案通过 `setLanguageData_end` 钩子注入）**两边都必须存在**
-- 14 国本土语言包必须同时更新 `language.php` 和 `admin.php`
-
-**检查清单**:
-- [ ] 审计插件语言包时，同时扫描 `Language/*/language.php` 和 `Language/*/admin.php`
-- [ ] 提取插件所有 `$this->language->get('xxx')` 调用点
-- [ ] 按调用场景归类：后台调用 → admin.php，前台调用 → language.php，共用 → 两边都补
-- [ ] 修改后清理 `storage/tmp/langs/` 编译缓存，强制重新压平
 
 ## 教训 #5: 路由路径必须对齐方法名，禁用横杠与下划线
 
@@ -605,135 +299,156 @@ public function save($request): ResponseInterface
 
 ---
 
-## 教训 #8: `$view->e()` 仅用于 `$view` 数据，foreach 变量必须用 `htmlspecialchars()`
+## 教训 #8: 模板严禁拼接路由或 URL
 
-**背景**: `$view->e('key')` 是 `$view` 对象的方法，只能访问控制器通过 `$this->render($layout, $data, ...)` 传入的 `$data` 数组。foreach 循环中的 `$node` 是普通 PHP 变量，不在 `$view` 的存储中，`$view->e($node['field'])` 返回空字符串。
+**背景**: WellCMS 3.0 的 `url_rewrite_on` 模式（`0/1/2/3`）会改变最终 URL 形态（如 `.html` 后缀、查询串格式）。若在模板（`views/htm/*.htm`）中拼接路由路径或查询字符串，生成的 URL 将与当前重写模式不一致，导致 404、SEO 断裂或转义缺口。**所有 URL 必须由控制器或服务层通过 `$this->urlGenerator->url()` 生成，以完整变量形式传入模板。**
 
 **错误模式** (严禁):
 ```php
-// ❌ 错误：$node 是 foreach 循环变量，$view->e() 取不到值
-<?php foreach ($nodes as $node): ?>
-    <span><?php echo $view->e($node['site_id']);?></span>
-    <span><?php echo $view->e($node['api_endpoint']);?></span>
-<?php endforeach; ?>
+// ❌ 错误 1：在模板中拼接路径段
+// manage_article_revisions.htm
+<a href="<?php echo htmlspecialchars((string)$compareAction . '/' . (int)$rev['id']);?>">
+
+// ❌ 错误 2：在模板中拼接查询字符串
+// article_detail.htm
+<a href="<?php echo htmlspecialchars((string)($category['slug'] ?? '') . '?tag=' . urlencode((string)($tag['slug'] ?? '')));?>">
 ```
 
 **正确模式** (必须):
 ```php
-// ✅ 正确：$view->e() 用于 $view 数据
-<?php echo $view->e('csrf_token');?>
+// ✅ 控制器中生成完整 URL 数组
+private function buildRevisionViewUrls(int $articleId, int $createdAt, array $revisions = []): array
+{
+    $compareUrls = [];
+    foreach ($revisions as $rev) {
+        $revisionId = (int) ($rev['id'] ?? 0);
+        if ($revisionId <= 0) {
+            continue;
+        }
+        $compareUrls[$revisionId] = $this->urlGenerator->url(
+            'manage/article/Compare/' . $articleId . '/' . $createdAt . '/' . $revisionId
+        );
+    }
 
-// ✅ 正确：foreach 变量用 htmlspecialchars()
-<?php foreach ($nodes as $node): ?>
-    <span><?php echo htmlspecialchars($node['site_id']);?></span>
-    <span><?php echo htmlspecialchars($node['api_endpoint']);?></span>
-    <span data-id="<?php echo (int)$node['id'];?>"></span>
-<?php endforeach; ?>
-```
+    return [
+        'compare_urls' => $compareUrls,
+        // ...
+    ];
+}
 
-**适用对照表**:
+// ✅ 模板仅直接输出已封装好的 URL（URL 已由控制器生成，无需再次转义）
+<a href="<?php echo $compareUrls[(int)$rev['id']] ?? ''; ?>">对比</a>
 
-| 数据来源 | 输出方法 | 示例 |
-|----------|----------|------|
-| `$view->get('key')` | `$view->e('key')` | `$view->e('csrf_token')` |
-| `$view->get('a.b')` 嵌套 | `$view->e('a.b')` | `$view->e('website.title')` |
-| `foreach` 循环变量 | `htmlspecialchars($v)` | `htmlspecialchars($node['name'])` |
-| 整型/布尔用于属性 | `(int)` / `(bool)` | `(int)$node['id']` |
-
-**检查清单**:
-- [ ] `$view->e()` 的参数是字符串 key，不是 PHP 变量
-- [ ] foreach 内无 `$view->e($loopVar[...])` 调用
-- [ ] 循环变量输出使用 `htmlspecialchars()` 或 `(int)` 强转
-
----
-
-## 教训 #9: 严禁使用 `$request->getAttributes()['key']`，必须使用 `$request->getAttribute('key')`
-
-**背景**: WellCMS 3.0 的 `ServerRequestInterface` 同时提供了 `getAttributes(): array`（返回全部属性数组）和 `getAttribute(string $name, $default = null)`（按名读取单个属性）。在控制器中通过数组下标访问属性（`$request->getAttributes()['user']`）不仅语法冗余，还会触发铁律 #25 的 `??` 兜底问题（`$request->getAttributes()['user'] ?? []`）。PSR-7 标准已提供原子方法，应直接调用。
-
-**错误模式** (严禁):
-```php
-// ❌ 错误：先取全量数组再下标访问，冗长且易触发 ?? 兜底
-$user = $request->getAttribute('user', []);
-$routeMeta = $request->getAttributes()['_route_meta'] ?? ['layout' => 'default'];
-```
-
-**正确模式** (必须):
-```php
-// ✅ 正确：直接使用 getAttribute 原子方法
-$user = $request->getAttribute('user');
-$routeMeta = $request->getAttribute('_route_meta');
+// ✅ 或使用视图对象的安全输出方法
+<a href="<?php echo $view->e('compare_urls.' . (int)$rev['id']); ?>">对比</a>
 ```
 
 **关键认知**:
-- `getAttribute('key')` 是 PSR-7 标准方法，语义清晰、零冗余
-- 路由中间件（如 `requiresAuth`、`requiresAdminSignIn`）已保证属性存在，无需兜底
--  eliminates the temptation to write `??` fallbacks after array access
-- 与 IDE 类型推断和静态分析工具兼容性更好
+- 模板是“绝对被动”的视图层，只负责渲染已由控制器/Service 准备好的数据
+- 查询参数同样必须通过 `$this->urlGenerator->url($route, ['tag' => $tagSlug])` 生成，禁止在模板中手动拼 `?key=value`
+- 路径段拼接会破坏铁律 #24（PascalCase 路由对齐方法名）的反向索引能力
 
 **检查清单**:
-- [ ] 控制器内无 `$request->getAttributes()['xxx']` 写法
-- [ ] 统一使用 `$request->getAttribute('xxx')`
-- [ ] 不因为 "保险" 而给 `getAttribute()` 追加 `??` 或 `?:` 兜底
+- [ ] 模板中无 `$xxx . '/' . $id` 形式的路径拼接
+- [ ] 模板中无 `'?tag=' . urlencode(...)` 等查询字符串拼接
+- [ ] 所有链接/表单 action/data-href/data-action 均使用控制器传入的完整 URL 变量
+- [ ] 列表页、详情页、版本历史、对比页等高频模板重点复查
 
 ---
 
-## 反合理化表 (Anti-Rationalization Tables)
+## 教训 #9: 模板输出严禁直接调用 `htmlspecialchars()`
 
-以下表格列出 WellCMS 开发中常见的"自我合理化"借口，以及对应的反驳和真实后果。代码审查和自检时逐一对照。
+**背景**: WellCMS 3.0 视图层已提供统一的安全输出方法 `$view->e('key')`，内部使用 `htmlspecialchars(..., ENT_QUOTES, 'UTF-8')`。若模板中零散调用 `htmlspecialchars()`，会导致转义方式不一致（`ENT_COMPAT` vs `ENT_QUOTES`、编码参数遗漏）、代码冗余，且容易遗漏局部变量抽取路径。**所有模板输出必须通过 `$view->e()` 或 `$view->raw()`，禁止自行调用底层转义函数。**
 
-### 路由与模板
+**错误模式** (严禁):
+```php
+// ❌ 错误 1：直接调用 htmlspecialchars
+<a href="<?php echo htmlspecialchars((string)$compareAction);?>">
+<?php echo htmlspecialchars((string)($article['title'] ?? '')); ?>
 
-| 合理化借口 | 反驳 | 真实后果 |
-|-----------|------|---------|
-| "路径加个横杠更可读" | Iron Law #24 强制路径对齐方法名，横杠破坏一一映射 | 下游站点无法通过 URL 反向索引到控制器方法，多站点同步断裂 |
-| "就一个模板，放 views/ 根目录行了" | `TemplateManager` 硬编码查找路径为 `views/htm/` | 模板 404，页面白屏，排查耗时 30 分钟以上 |
-| "这里用 `<?php exit;` 太麻烦，删掉" | Hook 文件缺少头标记，编译阶段直接跳过该文件 | Hook 不生效，功能缺失且无报错——最隐蔽的故障模式 |
-| "先写代码，路由 meta 等会儿再补" | 缺少 `requiresCsrf` 的 POST 路由无 CSRF 保护 | 安全漏洞直接暴露，XSS/CSRF 可被利用 |
-| "模板里用 `name='action'` 没问题" | `form.action` 被遮蔽为 HTMLInputElement 对象 | ajax-form 提交 URL 变成 `[object HTMLInputElement]`，请求失败 |
+// ❌ 错误 2：把需要转义的数据抽到本地变量后再手动转义
+$article = $view->get('article');
+<?php echo htmlspecialchars((string)($article['title'] ?? '')); ?>
+```
 
-### 数据库与模型
+**正确模式** (必须):
+```php
+// ✅ 通过视图对象的安全输出方法输出
+<?php echo $view->e('article.title'); ?>
 
-| 合理化借口 | 反驳 | 真实后果 |
-|-----------|------|---------|
-| "数据量小，用 OFFSET 分页没关系" | 铁律 #20 强制游标分页，OFFSET 在千万级必然性能崩塌 | 随着数据增长，OFFSET 越翻越慢，前端超时，DBA 深夜被叫醒 |
-| "就这一次，手动查一下 COUNT(*)" | 铁律 #16 严禁实时 COUNT，必须维护冗余统计字段 | 大表 `COUNT(*)` 全表扫描，高峰期拖垮数据库 |
-| "这里用 JOIN 更快，就两行" | 铁律 #17 多表关联必须在 PHP 层逐表查询合并 | 索引失效 + 死锁风险，协程环境下连接池耗尽 |
-| "array_diff 返回的结果直接传进 where" | 铁律 #23：非连续键数组被 `isset($v[0])` 误判为关联数组 | WHERE IN 拼成 `WHERE id IN ('1=>20, 2=>30')`，SQL 语法错误 |
-| "read() 和 find() 差不多，能跑就行" | `read()` 返回单行关联数组，`find()` 返回多行索引数组 | `foreach($readResult as $row)` 遍历的是单行的字段键而不是多行数据 |
-| "update 增量用数组嵌套也行吧" | 键名后缀语法 `field+` / `field-` 是唯一支持的增量语法 | `$update['downloads' => ['+=' => 1]]` 里的数组被 `paramsValueEscape` 转成字符串 `"Array"`，MySQL strict mode 抛异常 |
+// ✅ 原始数据仅用于遍历/判断，不直接输出
+<?php $article = $view->raw('article', []); ?>
+<?php if (!empty($article['tags'])) { foreach ($article['tags'] as $tag) { ?>
+    <span><?php echo $view->e('tag.name'); ?></span>
+<?php } } ?>
 
-### Hook 与插件
+// ✅ 本地变量只允许存放已由控制器预封装、无需转义的值（如 URL、数字 ID）
+<?php $rollbackAction = $view->get('rollback_action'); ?>
+<button data-href="<?php echo $rollbackAction; ?>">回滚</button>
+```
 
-| 合理化借口 | 反驳 | 真实后果 |
-|-----------|------|---------|
-| "就一个 use 语句，不会有冲突" | Hook 内容物理注入到主程序，重复 `use` 导致 PHP Fatal Error | 全站 500，需删除编译缓存重新压平才能恢复 |
-| "注释里写 `<?php` 没什么影响" | `sanitizeHookCode()` 的正则检测 AST 级别，注释中的 `<?php` 也会被拦截 | Hook 文件被跳过，功能静默不生效 |
-| "插件控制器定义一个构造函数也没事" | BaseController 的构造函数有 12+ 个参数，子类签名难对齐 | TypeError / LazyLoadingProxy 冲突，页面白屏 |
-| "config.json 缺少 install 声明，但文件在" | 框架通过 config.json 定位安装入口，不读取文件是否存在 | `install.php` 永远不会被执行，插件安装流程断裂 |
-| "语言包只更新 language.php 就行" | `admin.php` 和 `language.php` 是物理隔离的两个编译入口 | 后台页面语言键全部缺失，显示空白或报错 |
-| "assets 路径用绝对路径更保险" | 资产聚合框架将 assets 路径视为插件目录的相对路径 | JS/CSS 加载路径拼接错误，资源 404 |
+**关键认知**:
+- `$view->e()` 自动处理 `ENT_QUOTES` 和 `UTF-8`，统一转义策略
+- 需要转义的数据应保留在 `$view` 数据池中，通过键路径访问，而不是抽取到本地变量再手动转义
+- 局部变量只用于逻辑判断、遍历或输出已确认安全的值
 
-### 安全与架构
-
-| 合理化借口 | 反驳 | 真实后果 |
-|-----------|------|---------|
-| "控制器里手动 verifyCsrfToken() 双重保险" | 铁律 #8 禁止控制器内手动 CSRF 验证，路由中间件已统一拦截 | 重复校验逻辑、代码冗余，忘记调用时形成安全漏洞 |
-| "就这次用 `??` 兜个底，不会出问题" | 铁律 #25 零兜底严格模式——不存在时应让错误自然暴露 | 静默吞掉错误，数据不一致，排查时毫无线索 |
-| "私有 getter 加个返回类型声明更清晰" | 容器热路径可能返回 LazyLoadingProxy，类型声明触发 TypeError | 控制器方法调用全部崩溃，且故障间歇性复现难以定位 |
-| "在控制器里直接硬编码模板名更直观" | 铁律 #14 模板名必须从路由元数据读取 | 路由与模板解耦失败，模板路径变更需全局搜索替换 |
-| "跨插件直接调用 Model 更方便" | 铁律 #15 跨插件必须通过 Service 层 | 插件升级时内部 Model 变更导致调用方断裂，插件耦合失控 |
-
-### 代码审查与调试
-
-| 合理化借口 | 反驳 | 真实后果 |
-|-----------|------|---------|
-| "这个改动很小，不需要审查" | 80% 的生产事故来自"小改动" | 一行代码可能导致整站不可用，且 blame 追溯成本极高 |
-| "先合并，bug 后面修" | 技术债复利累积，修复成本随延迟指数增长 | 未修复的 bug 在后续 3 个迭代中造成连锁故障 |
-| "测试报错是环境问题，不是代码问题" | 没有排查就归因环境，是最大的调试反模式 | 真正的代码 bug 被忽视，推广到生产环境后爆发 |
-| "这个 flaky test 先 skip，不影响功能" | Flaky test 是真实 bug 的掩体 | 被跳过的测试在代码重构后无人察觉，回归漏洞带入生产 |
-| "线上问题，先 hotfix 再说原因" | 不查根因的 hotfix 只是贴膏药 | 同一问题以不同表象反复出现，每次 hotfix 增加技术债 |
+**检查清单**:
+- [ ] 模板中无 `htmlspecialchars(`、`htmlentities(` 调用
+- [ ] 输出文本/属性值优先使用 `$view->e('key.subkey')`
+- [ ] 遍历或判断使用 `$view->raw('key', $default)`
+- [ ] 本地变量仅存放 URL、ID、布尔等无需转义的预封装值
 
 ---
 
-*反合理化表最后更新: 2026-06-15 - 从 agent-skills 工程流程规范汲取结构模式，适配 WellCMS 专有约束*
+## 教训 #10: 模板严禁自定义 JS 与内联事件处理器
+
+**背景**: 前端交互的唯一标准库是 `app/views/js/main.js`（`window.wellcms`）。在模板中编写自定义 `<script>`、内联 `onclick`、自行封装 `fetch`/`XMLHttpRequest` 会破坏交互一致性，导致暗模式、Toast、弹窗、错误处理等行为与主程序脱节，且难以维护。**所有交互必须使用声明式属性或 `wellcms.*` API。**
+
+**错误模式** (严禁):
+```php
+// ❌ 错误 1：内联 onclick + 原生 confirm
+<button onclick="return confirm('<?php echo $view->get('language.delete_confirm');?>')">删除</button>
+
+// ❌ 错误 2：模板内自定义 <script> 块
+<script>
+    document.getElementById('btn').addEventListener('click', function() {
+        fetch('/api/delete', { method: 'POST' });
+    });
+</script>
+
+// ❌ 错误 3：自行拼接 JS URL 或硬编码 PHP 到 JS
+<script>
+    const url = '<?php echo $action; ?>';
+</script>
+```
+
+**正确模式** (必须):
+```php
+// ✅ 声明式交互（推荐）
+<button class="ajax-post"
+        data-href="<?php echo $rollbackAction; ?>"
+        data-confirm="<?php echo $view->e('language.well_article_revision_rollback_confirm'); ?>"
+        data-arg='<?php echo json_encode($rollbackArgs, JSON_HEX_APOS | JSON_UNESCAPED_UNICODE); ?>'>
+    回滚
+</button>
+
+// ✅ 迫不得已需要 JS 时，必须使用 wellcms API，且严禁在 JS 中硬编码 PHP
+<script>
+    wellcms.confirm('<?php echo $view->e('language.delete_confirm'); ?>', function() {
+        wellcms.post('<?php echo $view->e('action'); ?>', { id: 1 });
+    });
+</script>
+```
+
+**关键认知**:
+- `GlobalClickHandler` / `GlobalFormHandler` 已覆盖 99% 的交互场景
+- `onclick` / `onchange` / `onsubmit` 等内联事件处理器一律禁用
+- 任何 JS 中的动态值都必须通过 `wellcms` 数据属性或 `$view->e()` 注入，严禁在 JS 中直接写 PHP 变量
+
+**检查清单**:
+- [ ] 模板中无 `<script>` 块（除非使用 `wellcms.*` API）
+- [ ] 模板中无 `onclick=`、`onchange=`、`onsubmit=` 等内联事件
+- [ ] 无自定义 `fetch` / `XMLHttpRequest` / `$.ajax`
+- [ ] JS 中无硬编码 PHP 变量或路由字符串
+- [ ] 所有确认弹窗使用 `data-confirm` 或 `wellcms.confirm()`
+- [ ] 所有 AJAX 交互使用 `ajax-get` / `ajax-post` / `ajax-form` 或 `wellcms.get()` / `wellcms.post()`

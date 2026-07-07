@@ -48,7 +48,7 @@
 				<div class="space-y-1">
 					<span
 						class="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider"><?php echo $view->get('language.task_id'); ?></span>
-					<p class="text-lg font-mono font-bold text-gray-900 dark:text-white"><?php echo $task['id']; ?></p>
+					<p class="text-lg font-mono font-bold text-gray-900 dark:text-white"><?php echo $view->e('task.id'); ?></p>
 				</div>
 				<div class="space-y-1">
 					<span
@@ -62,7 +62,7 @@
 				<div class="space-y-1 md:col-span-2">
 					<span
 						class="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider"><?php echo $view->get('language.class_name'); ?></span>
-					<p class="text-base font-medium text-gray-900 dark:text-white"><?php echo $task['class_name']; ?>
+					<p class="text-base font-medium text-gray-900 dark:text-white"><?php echo $view->e('task.class_name'); ?>
 					</p>
 				</div>
 				<div class="space-y-1">
@@ -92,7 +92,7 @@
 			<div
 				class="bg-gray-50/50 dark:bg-slate-800/50 rounded-xl p-4 border border-gray-100 dark:border-gray-700 shadow-inner">
 				<pre class="text-xs font-mono text-gray-700 dark:text-gray-300 overflow-x-auto whitespace-pre-wrap">
-					<?php echo $task['formatted_args']; ?>
+					<?php echo $view->e('task.formatted_args'); ?>
 				</pre>
 			</div>
 
@@ -101,7 +101,7 @@
 				<h4 class="text-xs font-bold text-red-600 dark:text-red-400 uppercase tracking-wider mb-2">Error Log
 				</h4>
 				<p class="text-sm font-medium text-red-700 dark:text-red-300">
-					<?php echo $task['error_display']; ?></p>
+					<?php echo $view->e('task.error_display'); ?></p>
 			</div>
 			<?php } ?>
 		</div>
@@ -140,9 +140,9 @@
 			<div class="grid grid-cols-2 gap-4">
 				<div>
 					<span
-						class="text-[10px] font-bold text-indigo-400 uppercase"><?php echo $view->get('language.retry_count'); ?></span>
+						class="text-[10px] font-bold text-indigo-400 uppercase"><?php echo $view->get('language.retry'); ?></span>
 					<p class="text-xl font-bold text-indigo-600 dark:text-indigo-400">
-						<?php echo $task['retry_count'] ?? 0; ?></p>
+						<?php echo $task['retry'] ?? 0; ?></p>
 				</div>
 				<div>
 					<span
@@ -168,7 +168,7 @@
 					<span
 						class="text-[10px] font-bold text-gray-400 uppercase"><?php echo $view->get('language.callback_url'); ?></span>
 					<span
-						class="text-xs font-mono break-all text-blue-600 dark:text-blue-400"><?php echo $task['callback_url_display']; ?></span>
+						class="text-xs font-mono break-all text-blue-600 dark:text-blue-400"><?php echo $view->e('task.callback_url_display'); ?></span>
 				</div>
 				<div class="flex flex-col">
 					<span

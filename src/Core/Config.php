@@ -33,7 +33,7 @@ class Config
 
         $cfg = new self;
         foreach ($array as $key => $file) {
-            $basePath = defined('APP_PATH') ? APP_PATH : dirname(__DIR__, 2) . '/';
+            $basePath = \defined('APP_PATH') ? \APP_PATH : \dirname(__DIR__, 2) . '/';
             $configFile = $basePath . $file;
             if (!file_exists($configFile)) continue;
             $data = include $configFile;

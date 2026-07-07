@@ -334,10 +334,26 @@ class Builder
                 break;
             case 'bulkUpdate':
                 $info = $this->components['updateRows'];
+                $rows = $info['rows'];
+                $key  = $info['key'];
+                $columns = [];
+                if (!empty($rows)) {
+                    foreach ($rows[0] as $col => $val) {
+                        if ($col !== $key) $columns[] = $col;
+                    }
+                }
+                // buldUpdate() 的 binding 顺序：CASE(columns×rows×2) + IN(rows)
+                $bulkCount = count($columns) * count($rows) * 2 + count($rows);
+                if (count($this->bindings) > $bulkCount) {
+                    $whereCount = count($this->bindings) - $bulkCount;
+                    $whereBinds = array_slice($this->bindings, 0, $whereCount);
+                    $bulkBinds = array_slice($this->bindings, $whereCount);
+                    $this->bindings = array_merge($bulkBinds, $whereBinds);
+                }
                 $sql  = $this->grammar->compileBulkUpdate(
                     $this->components['table'],
-                    $info['key'],
-                    $info['rows'],
+                    $key,
+                    $rows,
                     $this->components['wheres']
                 );
                 break;
