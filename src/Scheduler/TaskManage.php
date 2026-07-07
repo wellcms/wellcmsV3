@@ -328,23 +328,50 @@ class TaskManage
         return ['status' => 'success', 'taskId' => $taskId];
     }
 
-    /** 查询任务详情（HASH中） */
+    /** 查询任务详情（HASH中或失败队列） */
     public function showTask(string $taskId): array
     {
+        // First try: task may be in active queue
         $raw = $this->redis->hGet('scheduler:queue:hash', $taskId);
-        if (!$raw) return ['status' => 'not_found'];
-        return ['status' => 'success', 'task' => json_decode($raw, true)];
+        if ($raw) {
+            return ['status' => 'success', 'task' => json_decode($raw, true)];
+        }
+
+        // Fallback: task may be in failed queue (hash deleted by moveToFailedQueue)
+        $failedData = $this->findInFailed($taskId);
+        if ($failedData) {
+            return ['status' => 'success', 'task' => $failedData];
+        }
+
+        return ['status' => 'not_found'];
     }
 
     /** 强制重试一次（立即或根据 retryDelay 重排） */
     public function retryTask(string $taskId): array
     {
+        // First try: task may be in active queue (pending/running/retrying)
         $raw = $this->redis->hGet('scheduler:queue:hash', $taskId);
-        if (!$raw) return ['status' => 'not_found'];
-        $task = Task::fromArray(json_decode($raw, true), false);
-        $task->maxRetries = max($task->maxRetries, $task->retryCount + 1);
-        $this->queue->requeue($task);
-        return ['status' => 'success', 'taskId' => $taskId];
+        if ($raw) {
+            $task = Task::fromArray(json_decode($raw, true), false);
+            $task->maxRetries = max($task->maxRetries, $task->retryCount + 1);
+            $this->queue->requeue($task);
+            return ['status' => 'success', 'taskId' => $taskId];
+        }
+
+        // Fallback: task may be in failed queue (hash deleted by moveToFailedQueue)
+        // Retry from failed list/DLQ with reset retryCount
+        $failedData = $this->findInFailed($taskId);
+        if ($failedData) {
+            $task = Task::fromArray($failedData, false);
+            $task->retryCount = 0;
+            $task->status = Task::STATUS_PENDING;
+            $task->scheduledAt = time();
+            $task->error = '';
+            $this->queue->push($task);
+            return ['status' => 'success', 'taskId' => $taskId];
+        }
+
+        return ['status' => 'not_found'];
     }
 
     /** 死信列表（前 100 条） */
