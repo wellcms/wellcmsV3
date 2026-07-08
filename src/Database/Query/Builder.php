@@ -254,7 +254,7 @@ class Builder
         foreach ($columns as $col) {
             foreach ($rows as $row) {
                 $this->bindings[] = $row[$keyColumn]; // CASE里的ID
-                $this->bindings[] = $row[$col];       // CASE里的值
+                $this->bindings[] = $row[$col] ?? 0;  // CASE里的值
             }
         }
 
