@@ -315,7 +315,7 @@ class WellRTE {
         group: "Lists",
       },
       { cmd: "formatBlock", val: "blockquote", label: "Quote", icon: "“" },
-      { cmd: "formatBlock", val: "pre", label: "Code Block", icon: "<>" },
+      { cmd: "insertCodeBlock", val: "custom", label: "Code Block", icon: "<>" },
       // Media
       { cmd: "insertImage", val: "custom", label: "Upload Image", icon: "📷" },
       { cmd: "insertTable", val: "custom", label: "Table", icon: "▦" },
@@ -1441,6 +1441,8 @@ class WellRTE {
         if (this.imageInput) this.imageInput.click();
       } else if (item.cmd === "insertTable") {
         this.insertTable();
+      } else if (item.cmd === "insertCodeBlock") {
+        this.insertCodeBlock();
       } else if (item.cmd === "callout") {
         this.execInsertCallout(item.val);
       } else if (item.cmd === "fontSize") {
@@ -1887,7 +1889,7 @@ class WellRTE {
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h12M7 17h12M5 7v.01M5 17v.01m2-10a2 2 0 11-4 0 2 2 0 014 0zm0 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
                     </button>
                     <button type="button" onclick="document.execCommand('formatBlock', false, 'blockquote')" title="Quote" class="rte-btn p-1.5 rounded hover:bg-gray-200 dark:hover:bg-slate-700 flex-shrink-0 font-serif font-bold text-lg">“</button>
-                    <button type="button" onclick="document.execCommand('formatBlock', false, 'pre')" title="Code Block" class="rte-btn p-1.5 rounded hover:bg-gray-200 dark:hover:bg-slate-700 flex-shrink-0 text-sm font-mono font-bold">&lt;&gt;</button>
+                    <button type="button" data-cmd="insertCodeBlock" title="Code Block" class="rte-btn p-1.5 rounded hover:bg-gray-200 dark:hover:bg-slate-700 flex-shrink-0 text-sm font-mono font-bold">&lt;&gt;</button>
 
 
                     <div class="w-px h-6 bg-gray-300 dark:bg-gray-600 mx-1 flex-shrink-0"></div>
@@ -2308,6 +2310,8 @@ class WellRTE {
 
         if (cmd === "removeFormat") {
           this.cleanFormat();
+        } else if (cmd === "insertCodeBlock") {
+          self.insertCodeBlock();
         } else {
           self.ensureCursorOutsideProtected();
           document.execCommand(cmd, false, null);
@@ -2349,6 +2353,54 @@ class WellRTE {
               textNode.textContent = textNode.textContent.replace("---", "");
             }
             return;
+          }
+
+          // Pre block smart exit: Enter at start/end exits the pre, Shift+Enter always inserts newline
+          // Guard: don't intercept during IME composition (Chinese/Japanese input)
+          if (!self.isComposing && !e.shiftKey && self.isInsidePre(range)) {
+            // Find the <pre> element
+            var preEl = range.commonAncestorContainer;
+            while (preEl && preEl.tagName !== 'PRE') {
+              preEl = preEl.parentElement;
+            }
+            if (preEl && preEl !== self.editorEl) {
+              var pos = self.getPreCursorPosition(preEl, range);
+              if (pos === 'start' || pos === 'end' || pos === 'empty') {
+                e.preventDefault();
+
+                if (pos === 'start') {
+                  // Exit before pre: insert new <p> before pre, move cursor there
+                  var p = document.createElement('p');
+                  p.innerHTML = '<br>';
+                  preEl.parentNode.insertBefore(p, preEl);
+                  var newRange = document.createRange();
+                  newRange.setStart(p, 0);
+                  newRange.collapse(true);
+                  sel.removeAllRanges();
+                  sel.addRange(newRange);
+                  self.lastRange = newRange;
+                } else {
+                  // pos === 'end' or 'empty': exit after pre
+                  var p = document.createElement('p');
+                  p.innerHTML = '<br>';
+                  if (preEl.nextSibling) {
+                    preEl.parentNode.insertBefore(p, preEl.nextSibling);
+                  } else {
+                    preEl.parentNode.appendChild(p);
+                  }
+                  var newRange = document.createRange();
+                  newRange.setStart(p, 0);
+                  newRange.collapse(true);
+                  sel.removeAllRanges();
+                  sel.addRange(newRange);
+                  self.lastRange = newRange;
+                }
+
+                self.updateSource();
+                return;
+              }
+              // pos === 'middle': let browser insert newline inside pre (code editing)
+            }
           }
         }
       }
@@ -3481,6 +3533,136 @@ class WellRTE {
       node = node.parentElement;
     }
     return false;
+  }
+
+  /**
+   * 判断光标在 <pre> 块内的位置
+   * @param {Element} pre — <pre> 元素
+   * @param {Range} range — 当前光标 Range
+   * @returns {'start'|'end'|'middle'|'empty'}
+   */
+  getPreCursorPosition(pre, range) {
+    var text = pre.textContent || '';
+    if (text.trim() === '') return 'empty';
+
+    // 计算 range.startContainer 在 pre 所有文本节点中的绝对字符偏移
+    var cursorOffset = 0;
+    var found = false;
+    var walker = document.createTreeWalker(pre, NodeFilter.SHOW_TEXT, null, false);
+    var node;
+    while ((node = walker.nextNode())) {
+      if (node === range.startContainer) {
+        cursorOffset += range.startOffset;
+        found = true;
+        break;
+      }
+      cursorOffset += node.textContent.length;
+    }
+
+    if (!found) {
+      // startContainer 不在遍历结果中（如光标在 <br> 上）
+      // 退化为检查 range 是否在 pre 末尾
+      var endRange = document.createRange();
+      endRange.selectNodeContents(pre);
+      endRange.collapse(false); // 折叠到 pre 末尾
+      if (range.compareBoundaryPoints(Range.START_TO_START, endRange) >= 0) {
+        return 'end';
+      }
+      return 'middle';
+    }
+
+    if (cursorOffset === 0) return 'start';
+    if (cursorOffset >= text.length) return 'end';
+    return 'middle';
+  }
+
+  /**
+   * 插入/切换代码块（<pre>）
+   * - 光标在 pre 内 → toggle off（转为 <p>）
+   * - 有选中文本 → 包裹选中内容为 <pre>
+   * - 无选中 → 插入空 <pre> 块
+   */
+  insertCodeBlock() {
+    var self = this;
+    var sel = window.getSelection();
+    if (!sel.rangeCount) return;
+
+    var range = sel.getRangeAt(0);
+
+    // Toggle off: 已在 pre 内 → 恢复为普通段落
+    if (this.isInsidePre(range)) {
+      var pre = range.commonAncestorContainer;
+      while (pre && pre.tagName !== 'PRE') {
+        pre = pre.parentElement;
+      }
+      if (pre && pre !== this.editorEl) {
+        var p = document.createElement('p');
+        // 将 <br> 还原为换行文本以保留格式
+        var inner = pre.innerHTML;
+        inner = inner.replace(/<br\s*\/?>/gi, '\n');
+        // 移除空的换行尾部
+        inner = inner.replace(/\n+$/, '');
+        p.innerHTML = inner || '<br>';
+        pre.replaceWith(p);
+
+        // 光标置入新 <p> 开头
+        var newRange = document.createRange();
+        newRange.setStart(p, 0);
+        newRange.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(newRange);
+        this.lastRange = newRange;
+
+        self.updateSource();
+        self.updateCounter();
+        return;
+      }
+    }
+
+    // 保存当前范围（insertNode 会改变 DOM）
+    var fragment = range.extractContents();
+    var selectedText = fragment.textContent || '';
+
+    var preEl = document.createElement('pre');
+    if (selectedText) {
+      preEl.textContent = selectedText;
+    } else {
+      preEl.innerHTML = '<br>';
+    }
+
+    range.insertNode(preEl);
+
+    // 确保 pre 后面有可编辑段落
+    this.ensureBlockAfter(preEl);
+
+    // 光标移入 pre 开头
+    var startRange = document.createRange();
+    startRange.setStart(preEl, 0);
+    startRange.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(startRange);
+    this.lastRange = startRange;
+
+    this.updateSource();
+    this.updateCounter();
+  }
+
+  /**
+   * 确保块元素后面存在可编辑段落（<p><br></p>）
+   * @param {Element} blockEl
+   */
+  ensureBlockAfter(blockEl) {
+    var next = blockEl.nextSibling;
+    // 如果后面没有兄弟节点、或兄弟节点是文本/内联元素，插入新段落
+    if (!next || next.nodeType === 3) {
+      var p = document.createElement('p');
+      p.innerHTML = '<br>';
+      if (next) {
+        blockEl.parentNode.insertBefore(p, next);
+      } else {
+        blockEl.parentNode.appendChild(p);
+      }
+    }
   }
 
   /**
