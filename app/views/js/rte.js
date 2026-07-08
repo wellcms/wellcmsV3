@@ -2482,6 +2482,7 @@ class WellRTE {
     const updateScroll = () => {
       const el = self.toolbarEl;
       const hint = self.scrollHintEl;
+      if (!hint) return;
       const isScrollable = el.scrollWidth > el.clientWidth;
       const isAtEnd = el.scrollLeft + el.clientWidth >= el.scrollWidth - 2;
       if (isScrollable && !isAtEnd) hint.classList.remove("opacity-0");

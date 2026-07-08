@@ -36,7 +36,7 @@
 
   // ── Exclude images inside the RTE editor ──────────────────────────────────
   var _excludes = [
-    '.rte-content img',
+    '.rte-content[contenteditable] img',
     '.rte-toolbar-scroll img',
     '.avatar img',
     '.emoji img',
