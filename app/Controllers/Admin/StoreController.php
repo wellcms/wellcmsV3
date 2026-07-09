@@ -410,7 +410,7 @@ class StoreController extends BaseController
         }
         $extensionType = (2 === (int)($read['type'] ?? 1)) ? 'theme' : 'plugin';
 
-        // P0 FIX: 本地付费校验，未购买禁止直接下载
+        // 本地付费校验，未购买禁止直接下载
         if ((int)($read['price'] ?? 0) > 0 && empty($read['payment_id'])) {
             return $this->errorMessage(
                 $this->language->get('plugin_unpaid_tip'),

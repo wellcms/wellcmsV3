@@ -71,7 +71,9 @@ class ExtensionInstaller
             // 4. "影子解压"策略：先行解压到临时路径
             $shadowPath = $this->tmpPath . 'shadow_' . $dir . '/';
             DirectoryHelper::rmdirRecursive($shadowPath);
-            mkdir($shadowPath, 0755, true);
+            if (!is_dir($shadowPath)) {
+                mkdir($shadowPath, 0755, true);
+            }
 
             $zip = new \Framework\Utils\ZipUtility();
             $zip->unzip($zipFile, $shadowPath);
@@ -156,7 +158,21 @@ class ExtensionInstaller
     {
         // 清理当前任务产生的碎片
         $shadow = $this->tmpPath . 'shadow_' . $dir;
-        if (is_dir($shadow)) DirectoryHelper::rmdirRecursive($shadow);
+        if (is_dir($shadow)) DirectoryHelper::rmdirRecursive($shadow, true);
+
+        // 清理残留压缩包
+        $zips = glob($this->tmpPath . $dir . '_*.zip'); 
+        if (!empty($zips)) {
+            foreach ($zips as $zip) @unlink($zip);
+        }
+        
+        // 清理残留备份目录
+        $backups = glob($this->tmpPath . 'backup_' . $dir . '_*');
+        if (!empty($backups)) {
+            foreach ($backups as $backup) {
+                if (is_dir($backup)) DirectoryHelper::rmdirRecursive($backup, true);
+            } 
+        }    
     }
 
 

@@ -78,7 +78,7 @@ class OtherController extends BaseController
                 $cacheConfig = $this->container->get('cacheConfig');
                 if (!empty($cacheConfig['stores']['redis']) && $cache instanceof \Framework\Cache\CacheManager) {
                     $redis = $cache->original('redis');
-                    if ($redis !== null) {
+                    if ($redis instanceof \Framework\Cache\Drivers\RedisCache) {
                         $keys = $redis->keys('scheduler:dedupe:*');
                         if (!empty($keys)) {
                             $redis->del($keys);
