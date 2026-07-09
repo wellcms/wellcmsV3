@@ -7,7 +7,7 @@ return [
     'cookie_domain' => '',   // cookie使用的域名，为空表示当前域名
     'cookie_path' => '/',     // 为空则表示当前目录和子目录
     'cookie_lifetime' => 8640000, // cookie生命期8640000为100天
-    'cookie_secure' => true, // 在生产环境中，如果站点使用HTTPS，应该将此设置为true
+    'cookie_secure' => false, // 在生产环境中，如果站点使用HTTPS，应该将此设置为true
     'cookie_samesite' => 'Lax', // None | Lax | Strict，跨站点请求时是否携带 Cookie，防 CSRF 攻击，默认 Lax，None 需要配合 cookie_secure = true 使用。
     'httponly' => true, // 打开后 js 获取不到 HTTP 设置的 cookie, 有效防止 XSS，对于安全很重要，除非有 BUG，否则不要关闭。
     'cache_sessionsData_expire' => 21600, // 缓存session > 255的数据生命期。

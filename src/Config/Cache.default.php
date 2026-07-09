@@ -11,7 +11,7 @@ return [
     'site_id' => $siteId !== false ? $siteId : '',
 
     // 默认使用 MySQL 降级缓存
-    //'default' => 'mysql',
+    'default' => 'mysql',
 
     // 各驱动配置，使用哪个在根目录/config目录下配置哪个，如果配置多个缓存，会操作按照配置顺序操作多个。一般缓存组合本地Apcu/YAC(二选一)，集群远程Redis/memcached(二选一)
     'stores' => [
