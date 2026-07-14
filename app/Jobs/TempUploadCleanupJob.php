@@ -34,9 +34,11 @@ class TempUploadCleanupJob implements \Framework\Scheduler\Interfaces\JobInterfa
     {
         // hook app_Jobs_TempUploadCleanupJob_handle_start.php
 
-        $this->logger->info('TempUploadCleanupJob started', array(
-            'task_id' => $_task_id,
-        ));
+        if (defined('DEBUG') && \DEBUG > 0) {
+            $this->logger->info('TempUploadCleanupJob started', array(
+                'task_id' => $_task_id,
+            ));
+        }
 
         try {
             // clean() 内部从 $this->config 读取 scheduler_batch_size
@@ -59,7 +61,7 @@ class TempUploadCleanupJob implements \Framework\Scheduler\Interfaces\JobInterfa
             $this->scheduleNext();
             return $result['errors'] === 0;
         } catch (\Throwable $e) {
-            // 铁律 #25：异常不静默
+            // 异常不静默
             $this->logger->error('TempUploadCleanupJob failed', array(
                 'error'   => $e->getMessage(),
                 'task_id' => $_task_id,

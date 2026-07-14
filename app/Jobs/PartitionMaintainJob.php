@@ -59,9 +59,11 @@ class PartitionMaintainJob implements \Framework\Scheduler\Interfaces\JobInterfa
     public function handle(?string $_task_id = null): bool
     {
         // hook app_Jobs_PartitionMaintainJob_handle_start.php
-        $this->logger->info('PartitionMaintainJob started', array(
-            'task_id' => $_task_id,
-        ));
+        if (defined('DEBUG') && \DEBUG > 0) {
+            $this->logger->info('PartitionMaintainJob started', array(
+                'task_id' => $_task_id,
+            ));
+        }
 
         try {
             $result = $this->partitionManager->maintain();

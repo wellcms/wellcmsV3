@@ -180,7 +180,13 @@ class SecurityHelper
      */
     public static function generateToken(string $key, array $data)
     {
+        if (empty($data)) {
+            throw new \InvalidArgumentException("Data array must contain 'user_id', 'ip', 'ua', and 'time' keys.");
+        }
         $json = json_encode($data);
+        if ($json === false) {
+            throw new \RuntimeException("Failed to encode data to JSON: " . json_last_error_msg());
+        }
         return self::encrypt($json, $key);
     }
 

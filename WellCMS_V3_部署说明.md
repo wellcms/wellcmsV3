@@ -82,10 +82,32 @@ chmod -R 755 config/
 chmod -R 755 install/
 ```
 
-### 3. 配置 Web 服务器
+### 3. 运行安装向导
+访问：
+```
+http://your-domain.com/install/
+```
+按页面提示完成 5 步安装：
+1. 同意许可协议
+2. 环境检测
+3. 数据库配置
+4. 管理员账号设置
+5. 完成安装
+
+### 4. 安装后安全设置
+安装完成后，系统会生成 `install/install.lock` 文件。建议通过 Nginx 配置禁止直接访问 `install/` 目录：
+```nginx
+location ^~ /install/ {
+    deny all;
+}
+```
+
+### 5. 配置 Web 服务器
+
 将网站文档根目录指向 `public/` 目录。
 
 #### Nginx 配置示例
+
 ```nginx
 server {
     listen 80;
@@ -111,26 +133,6 @@ server {
 ```
 
 > 更详细的伪静态规则请参考项目根目录下的 `nginx.conf.example`。
-
-### 4. 运行安装向导
-访问：
-```
-http://your-domain.com/install/
-```
-按页面提示完成 5 步安装：
-1. 同意许可协议
-2. 环境检测
-3. 数据库配置
-4. 管理员账号设置
-5. 完成安装
-
-### 5. 安装后安全设置
-安装完成后，系统会生成 `install/install.lock` 文件。建议通过 Nginx 配置禁止直接访问 `install/` 目录：
-```nginx
-location ^~ /install/ {
-    deny all;
-}
-```
 
 ---
 
