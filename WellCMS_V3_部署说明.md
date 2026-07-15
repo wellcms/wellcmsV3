@@ -95,41 +95,111 @@ http://your-domain.com/install/
 5. 完成安装
 
 ### 4. 安装后安全设置
-安装完成后，系统会生成 `install/install.lock` 文件。建议通过 Nginx 配置禁止直接访问 `install/` 目录：
-```nginx
-location ^~ /install/ {
-    deny all;
-}
-```
+安装完成后，系统会生成 `install/install.lock` 文件。
 
 ### 5. 配置 Web 服务器
 
 将网站文档根目录指向 `public/` 目录。
 
-#### Nginx 配置示例
+修改网站根目录 `config/App.php` 文件 `'url_rewrite_on' => 2` 2: /user/home/1.html 或 3: /user/home/1
+
+#### Nginx 伪静态配置示例
 
 ```nginx
+# WellCMS 3.0 Nginx 配置参考
+# ⚠️ 重要提示：请将下方所有 /www/wwwroot/wellcms/ 路径替换为你服务器的实际部署路径！
+
 server {
     listen 80;
     server_name your-domain.com;
-    root /var/www/wellcmsV3/public;
-    index index.php;
 
+    # ⚠️ 修改此处为你服务器的实际站点根目录（必须指向 public/ 目录）
+    root /www/wwwroot/wellcms/public;
+    index index.php index.html;
+
+    # ------------------------------------------------------------------------
+    # 1) 视图静态资源（CSS/JS/图片/字体等）
+    # ------------------------------------------------------------------------
+    location ^~ /views/ {
+        # root = alias 路径去掉最后一级目录，避免 alias + 嵌套 location 的兼容问题
+        root /www/wwwroot/wellcms/app;
+
+        # 禁止直接访问 .htm 模板（暴露页面结构）
+        location ~ \.htm$ { deny all; }
+
+        access_log off;
+        expires 30d;
+    }
+
+    # ------------------------------------------------------------------------
+    # 2) 上传文件静态资源
+    # ------------------------------------------------------------------------
+    location ^~ /upload/ {
+        # root = alias 路径去掉最后一级 upload 目录
+        root /www/wwwroot/wellcms/storage;
+
+        # 禁止执行 PHP（防插件解压目录 RCE）
+        location ~ \.php$ { deny all; }
+
+        # 禁止直接访问 HTML（防上传 HTML 引发的同源 XSS）
+        location ~ \.html$ { deny all; }
+
+        access_log off;
+        expires 30d;
+    }
+
+    # ------------------------------------------------------------------------
+    # 3) 程序静态资源（runtime 打包 JS/CSS 等）
+    # ------------------------------------------------------------------------
+    location ^~ /static/ {
+        # root = alias 路径去掉最后一级 static 目录
+        root /www/wwwroot/wellcms/public;
+
+        # 纵深防御：禁止 PHP 执行
+        location ~ \.php$ { deny all; }
+
+        access_log off;
+        expires 30d;
+    }
+
+    # ------------------------------------------------------------------------
+    # 4a) 插件/主题 — 仅放行图片文件（扩展名白名单）
+    #
+    # 安全原则:
+    #   plugins/ 和 themes/ 位于 public 之外，nginx 通过 root 定向到项目根
+    #   扩展名白名单确保 .php/.htm/.json 等不可被访问或下载
+    #   图片以静态文件返回，注入 PHP 代码也无需担心（不经过 FPM 解释）
+    # ------------------------------------------------------------------------
+    location ~ ^/(plugins|themes)/.+\.(png|jpg|jpeg|gif|svg|webp|ico)$ {
+        root /www/wwwroot/wellcms;
+        add_header X-Content-Type-Options "nosniff";
+        add_header Cache-Control "public, immutable";
+        access_log off;
+        expires 30d;
+    }
+
+    # ------------------------------------------------------------------------
+    # 4b) 插件/主题 — 拒绝其余所有访问
+    # ------------------------------------------------------------------------
+    location ~ ^/(plugins|themes)/ {
+        deny all;
+        access_log off;
+        return 404;
+    }
+
+    # ------------------------------------------------------------------------
+    # 5) 伪静态规则（兼容 3 种 URL 风格，不推荐0和1，整个程序围绕3和4链接形式开发）
+    #    1:user-login.html | 2:/user/login.html | 3:/user/login
+    # ------------------------------------------------------------------------
     location / {
         try_files $uri $uri/ /index.php?$query_string;
     }
 
-    location ~ \.php$ {
-        fastcgi_pass 127.0.0.1:9000;
-        fastcgi_index index.php;
-        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
-        include fastcgi_params;
-    }
-
-    location ~ /\.(git|svn|htaccess|env) {
+    location ~ /\.ht {
         deny all;
     }
 }
+
 ```
 
 > 更详细的伪静态规则请参考项目根目录下的 `nginx.conf.example`。

@@ -46,7 +46,7 @@ return [
      * 2: /user/home/1.html
      * 3: /user/home/1
      */
-    'url_rewrite_on' => 0,
+    'url_rewrite_on' => 2,
     'link_secret' => '123456', // URL 加密密钥，严禁修改，否则URL会改变，影响SEO
     // 当使用非默认语言时，是否在 URL 前缀语言代码，false=不启用
     'url_language_prefix' => true,
