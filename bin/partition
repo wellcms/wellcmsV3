@@ -1,0 +1,179 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+/**
+ * 打印帮助信息并退出。
+ */
+function showHelp(): void
+{
+    echo <<<HELP
+WellCMS 分区维护 CLI 脚本
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  何时使用
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ◆ Supervisor + Scheduler 环境（推荐）
+    分区维护由 PartitionMaintainJob 自动每日调度。
+    本脚本仅用于手动触发（如故障应急、单表维护）。
+    后台管理 /admin/PartitionStatus 也可手动触发。
+
+  ◆ 无 Scheduler 环境（备选）
+    通过 crontab 定期调用：
+      0 3 1 * * php /path/to/bin/partition >> storage/logs/partition_cron.log 2>&1
+
+  ┌─────────────────────────────────────────────────────────┐
+  │ 三个脚本的区别：                                          │
+  │                                                         │
+  │ bin/partition              日常维护 / 单表维护            │
+  │ bin/migrate-partitions     存量系统首次接管（自动模式）    │
+  │ bin/migrate-partitions-prod 存量系统首次接管（审计模式）    │
+  └─────────────────────────────────────────────────────────┘
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  用法
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  php bin/partition                     执行全量维护
+  php bin/partition --dry-run           预览模式（不执行 DDL）
+  php bin/partition --table=forum_thread 单表维护
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  选项
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  --dry-run        预览模式，输出会创建/删除的分区，不执行 DDL
+  --table=TABLE    仅维护指定表（纯表名，如 forum_thread）
+  --help           显示本帮助
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+HELP;
+    exit(0);
+}
+
+/**
+ * WellCMS 分区维护 CLI 脚本。
+ *
+ * 用途：手动触发分区维护（全量或单表），适用于：
+ *   - Supervisor + Scheduler 环境：分区维护由 PartitionMaintainJob
+ *     自动定时执行，本脚本仅用于手动触发或故障应急。
+ *   - 无 Scheduler 环境：可通过 crontab 定期调用。
+ *
+ * 用法：
+ *   php bin/partition                          # 执行全量维护
+ *   php bin/partition --dry-run                # 预览模式（不执行 DDL）
+ *   php bin/partition --table=forum_thread     # 单表维护
+ *
+ * 部署方式（二选一）：
+ *   方式 A（推荐，Supervisor + Scheduler）：
+ *     分区维护由 PartitionMaintainJob 自动调度，无需 crontab。
+ *     Job 注册方式见 app/Jobs/PartitionMaintainJob.php。
+ *
+ *   方式 B（备选，crontab）：
+ *     0 3 1 * * php /path/to/bin/partition >> storage/logs/partition_cron.log 2>&1
+ *
+ * 防重入：
+ *   使用 pid 文件 + flock 确保同一时刻只有一个实例执行 DDL。
+ *   若与 Scheduler Job 或后台手动触发并发，由 maintain() 内部的
+ *   Redis 分布式锁提供二次保护。
+ *
+ * PHP 7.2 兼容。
+ */
+
+// ========== 解析参数（在获取锁之前执行，避免 --help 需先获取锁） ==========
+$opts = getopt('', array('dry-run', 'table:', 'help'));
+
+if (isset($opts['help'])) {
+    showHelp();
+}
+
+$dryRun = isset($opts['dry-run']);
+$table = isset($opts['table']) ? $opts['table'] : null;
+
+// ========== 环境初始化 ==========
+define('IN_WELLCMS', true);
+define('APP_PATH', str_replace('\\', DIRECTORY_SEPARATOR, dirname(__DIR__)) . DIRECTORY_SEPARATOR);
+define('DEBUG', 1);
+
+if (DEBUG) {
+    error_reporting(E_ALL);
+    ini_set('display_errors', '1');
+} else {
+    error_reporting(E_ALL & ~E_NOTICE & ~E_DEPRECATED);
+    ini_set('display_errors', '0');
+}
+
+require APP_PATH . 'app/Core/Compile.php';
+require APP_PATH . 'app/Core/Autoload.php';
+
+// ========== 防重入：pid 文件锁 ==========
+$lockFile = sys_get_temp_dir() . '/partition_maintain.lock';
+$lockFp = fopen($lockFile, 'c');
+if (!$lockFp || !flock($lockFp, LOCK_EX | LOCK_NB)) {
+    fwrite(STDERR, "ERROR: Another partition maintenance process is already running.\n");
+    exit(1);
+}
+
+// ========== 初始化容器 ==========
+try {
+    $container = \App\Bootstrap::init();
+} catch (\Throwable $e) {
+    fwrite(STDERR, "ERROR: Bootstrap failed: " . $e->getMessage() . "\n");
+    flock($lockFp, LOCK_UN);
+    fclose($lockFp);
+    exit(1);
+}
+
+// ========== 执行维护 ==========
+$pm = $container->get(\Framework\Database\Partition\PartitionManager::class);
+$logger = $container->get(\Framework\Logger\LoggerInterface::class);
+
+$logger->info('Partition CLI started', array(
+    'dry_run' => $dryRun,
+    'table'   => $table,
+));
+
+try {
+    if ($table) {
+        $result = $pm->maintainOne($table, $dryRun);
+    } else {
+        $result = $pm->maintain($dryRun);
+    }
+
+    $logger->info('Partition CLI completed', array(
+        'trigger'            => 'cli',
+        'dry_run'            => $dryRun,
+        'tables_scanned'     => $result->tablesScanned,
+        'partitions_created' => $result->partitionsCreated,
+        'partitions_dropped' => $result->partitionsDropped,
+        'errors'             => $result->errors,
+        'execution_ms'       => round($result->executionMs, 2),
+    ));
+
+    echo sprintf(
+        "[%s] %s: scanned=%d created=%d dropped=%d errors=%d (%.0f ms)\n",
+        date('Y-m-d H:i:s'),
+        $dryRun ? 'DRY-RUN' : 'DONE',
+        $result->tablesScanned,
+        $result->partitionsCreated,
+        $result->partitionsDropped,
+        $result->errors,
+        $result->executionMs
+    );
+
+    $exitCode = $result->errors === 0 ? 0 : 1;
+} catch (\Throwable $e) {
+    $logger->error('Partition CLI failed', array(
+        'error' => $e->getMessage(),
+    ));
+    fwrite(STDERR, "ERROR: " . $e->getMessage() . "\n");
+    $exitCode = 1;
+}
+
+// ========== 释放锁 ==========
+flock($lockFp, LOCK_UN);
+fclose($lockFp);
+
+exit($exitCode);

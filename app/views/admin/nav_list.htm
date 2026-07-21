@@ -1,0 +1,248 @@
+<?php use App\Core\Compile;?>
+<?php include Compile::include(APP_PATH.'app/views/admin/header.inc.htm');?>
+
+<!-- Breadcrumbs -->
+<div class="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4 w-full max-w-7xl mx-auto">
+	<nav aria-label="Breadcrumb">
+		<ol class="flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400">
+			<li>
+				<a href="<?php echo $view->get('breadcrumb.home.url');?>" class="hover:text-blue-600 transition-colors">
+					<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+							d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+					</svg>
+				</a>
+			</li>
+			<li><span class="mx-1">/</span></li>
+			<li class="font-bold text-gray-900 dark:text-white">
+				<?php echo $view->e('breadcrumb.list.name');?>
+			</li>
+		</ol>
+	</nav>
+</div>
+
+<!-- Actions Bar -->
+<div class="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4 w-full max-w-7xl mx-auto">
+	<div class="flex items-center space-x-2 w-full sm:w-auto">
+		<h1 class="text-2xl font-black text-gray-900 dark:text-white tracking-tight">
+			<?php echo $view->e('header.title'); ?>
+		</h1>
+	</div>
+
+	<div class="flex items-center space-x-3 w-full sm:w-auto">
+		<?php $createBtn = $view->get('create_btn'); ?>
+		<a href="<?php echo $createBtn['url'];?>" class="<?php echo $createBtn['class'];?>">
+			<?php echo $view->e('create_btn.label'); ?>
+		</a>
+	</div>
+</div>
+
+<!-- Navigations Table -->
+<div class="glass-panel rounded-2xl overflow-hidden mb-6 w-full max-w-7xl mx-auto" id="nav-list">
+	<div class="overflow-x-auto">
+		<table class="min-w-full text-left text-sm whitespace-nowrap">
+			<thead class="bg-gray-50/50 dark:bg-slate-800/50 border-b border-gray-200 dark:border-gray-700">
+				<tr>
+					<th class="px-6 py-4 font-bold text-gray-600 dark:text-gray-300 w-12">
+						<input type="checkbox" id="selectAll"
+							class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+					</th>
+					<th class="px-6 py-4 font-bold text-gray-600 dark:text-gray-300 w-16">ID</th>
+					<th class="px-6 py-4 font-bold text-gray-600 dark:text-gray-300 min-w-[200px]">
+						<?php echo $view->e('language.navigation_name'); ?>
+					</th>
+					<th class="px-6 py-4 font-bold text-gray-600 dark:text-gray-300 w-32">
+						<?php echo $view->e('language.type'); ?>
+					</th>
+					<th class="px-6 py-4 font-bold text-gray-600 dark:text-gray-300 min-w-[150px]">
+						<?php echo $view->e('language.parent_id'); ?>
+					</th>
+					<th class="px-6 py-4 font-bold text-gray-600 dark:text-gray-300 text-center w-24">
+						<?php echo $view->e('language.jump'); ?>
+					</th>
+					<th class="px-6 py-4 font-bold text-gray-600 dark:text-gray-300 text-center w-24">
+						<?php echo $view->e('language.hide'); ?>
+					</th>
+					<th class="px-6 py-4 font-bold text-gray-600 dark:text-gray-300 text-right w-32">
+						<?php echo $view->e('language.operation'); ?>
+					</th>
+				</tr>
+			</thead>
+			<tbody class="divide-y divide-gray-200 dark:divide-gray-700 item-list">
+				<?php foreach($view->iterate('result') as $item): ?>
+				<tr id="<?php echo $item->get('id');?>"
+					class="hover:bg-gray-50/50 dark:hover:bg-white/5 transition-colors group">
+					<td class="px-6 py-4">
+						<input type="checkbox" class="rounded border-gray-300 text-blue-600 item" name="id"
+							value="<?php echo $item->get('id'); ?>" />
+					</td>
+					<td class="px-6 py-4 font-mono text-xs text-gray-500"><?php echo $item->get('id');?></td>
+					<td class="px-6 py-4">
+						<div
+							class="font-bold text-gray-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+							<?php echo $item->raw('name_fmt.prefix');?>
+							<?php echo $item->e('name_fmt.name');?>
+						</div>
+						<div class="text-xs text-gray-400 font-mono truncate max-w-[200px]"
+							title="<?php echo $item->e('name_fmt.url_title');?>">
+							<?php echo $item->e('url');?>
+						</div>
+					</td>
+					<td class="px-6 py-4">
+						<span
+							class="px-2 py-0.5 rounded-lg text-xs font-bold <?php echo $item->get('type_fmt.class'); ?>">
+							<?php echo $item->get('type_fmt.label'); ?>
+						</span>
+					</td>
+					<td class="px-6 py-4">
+						<span class="text-xs text-gray-500 dark:text-gray-400">
+							<?php echo $item->e('parent_name') ?: '-'; ?>
+						</span>
+					</td>
+					<td class="px-6 py-4 text-center">
+						<span
+							class="px-2 py-0.5 rounded-full text-xs font-bold <?php echo $item->get('jump_fmt_data.class'); ?>">
+							<?php echo $item->get('jump_fmt_data.label');?>
+						</span>
+					</td>
+					<td class="px-6 py-4 text-center">
+						<span
+							class="px-2 py-0.5 rounded-full text-xs font-bold <?php echo $item->get('hide_fmt_data.class'); ?>">
+							<?php echo $item->get('hide_fmt_data.label');?>
+						</span>
+					</td>
+					<td class="px-6 py-4 text-right space-x-3">
+						<?php foreach($item->get('operations') as $op): ?>
+						<a href="<?php echo $op['url'];?>"
+							class="font-bold transition-colors <?php echo $op['class'];?>">
+							<?php echo $op['label'];?>
+						</a>
+						<?php endforeach; ?>
+					</td>
+				</tr>
+				<?php endforeach; ?>
+				<?php if (!$view->get('result')): ?>
+				<tr>
+					<td colspan="8" class="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
+						<div class="flex flex-col items-center">
+							<svg class="w-12 h-12 mb-4 opacity-20" fill="none" stroke="currentColor"
+								viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+									d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+							</svg>
+							<span class="text-sm font-medium"><?php echo $view->get('language.none');?></span>
+						</div>
+					</td>
+				</tr>
+				<?php endif; ?>
+			</tbody>
+		</table>
+	</div>
+
+	<!-- Bulk Actions & Pagination -->
+	<div
+		class="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row justify-between items-center gap-4">
+		<div class="flex items-center space-x-3">
+			<?php $bulkBtn = $view->get('bulk_delete_btn'); ?>
+			<button type="button" class="<?php echo $bulkBtn['class'];?>" data-url="<?php echo $bulkBtn['url']; ?>"
+				data-csrf="<?php echo $view->e('csrf_token'); ?>" processing="false">
+				<?php echo $bulkBtn['label']; ?>
+			</button>
+			<span class="text-xs text-gray-500 dark:text-gray-400">Total:
+				<?php echo count($view->get('result') ?? []); ?> items</span>
+		</div>
+
+		<?php if ($view->get('pagination.prev') || $view->get('pagination.next')): ?>
+		<nav class="flex items-center space-x-2">
+			<?php if ($prev = $view->get('pagination.prev')): ?>
+			<a href="<?php echo $prev['url']; ?>" class="<?php echo $prev['class']; ?>">
+				<?php echo $prev['label']; ?>
+			</a>
+			<?php endif; ?>
+
+			<?php if ($next = $view->get('pagination.next')): ?>
+			<a href="<?php echo $next['url']; ?>" class="<?php echo $next['class']; ?>">
+				<?php echo $next['label']; ?>
+			</a>
+			<?php endif; ?>
+		</nav>
+		<?php endif; ?>
+	</div>
+</div>
+
+<?php include Compile::include(APP_PATH . 'app/views/admin/footer.inc.htm');?>
+
+<script>
+	document.addEventListener("DOMContentLoaded", function () {
+		const listContainer = document.getElementById('nav-list');
+		const selectAll = document.getElementById('selectAll');
+		const bulkBtn = document.querySelector(".bulk-delete");
+		const csrfToken = "<?php echo $view->e('csrf_token'); ?>";
+
+		if (selectAll) {
+			const getItems = () => Array.from(listContainer.querySelectorAll('input.item'));
+			selectAll.onchange = () => getItems().forEach(item => item.checked = selectAll.checked);
+
+			listContainer.addEventListener("change", (e) => {
+				if (e.target.classList.contains('item')) {
+					const items = getItems();
+					const checked = items.filter(i => i.checked).length;
+					selectAll.checked = checked === items.length;
+					selectAll.indeterminate = checked > 0 && checked < items.length;
+				}
+			});
+		}
+
+		const getSelectedIds = () => Array.from(document.querySelectorAll('input.item:checked')).map(cb => cb.value);
+
+		if (bulkBtn) {
+			bulkBtn.onclick = async function () {
+				if (this.getAttribute("processing") === "true") return;
+				const ids = getSelectedIds();
+				if (wellcms.isEmpty(ids)) {
+					wellcms.toast("<?php echo $view->get('language.none'); ?>", "warning");
+					return;
+				}
+
+				wellcms.confirm("<?php echo $view->get('language.confirm_delete') ?: 'Are you sure?'; ?>", async () => {
+					try {
+						this.setAttribute("processing", "true");
+						const res = await wellcms.post(this.dataset.url, { id: ids, _csrf_token: csrfToken });
+						if (res.code === 0) {
+							wellcms.toast(res.message, "success");
+							setTimeout(() => window.location.reload(), 1000);
+						} else {
+							wellcms.error(res.message);
+							this.setAttribute("processing", "false");
+						}
+					} catch (e) {
+						wellcms.error(e.message);
+						this.setAttribute("processing", "false");
+					}
+				});
+			};
+		}
+
+		listContainer.onclick = async (e) => {
+			const btn = e.target.closest('.ajax-delete');
+			if (!btn) return;
+			e.preventDefault();
+
+			wellcms.confirm("<?php echo $view->get('language.confirm_delete') ?: 'Are you sure?'; ?>", async () => {
+				try {
+					const row = btn.closest('tr');
+					const res = await wellcms.post(btn.href, { _csrf_token: csrfToken });
+					if (res.code === 0) {
+						wellcms.toast(res.message, "success");
+						row.classList.add('opacity-0', 'scale-95', 'transition-all', 'duration-500');
+						setTimeout(() => row.remove(), 500);
+					} else {
+						wellcms.error(res.message);
+					}
+				} catch (err) {
+					wellcms.error(err.message);
+				}
+			});
+		};
+	});
+</script>

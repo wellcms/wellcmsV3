@@ -1,0 +1,116 @@
+<?php use App\Core\Compile;?>
+<?php include Compile::include(APP_PATH.'app/views/admin/header.inc.htm');?>
+
+<!-- Breadcrumbs -->
+<div class="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4 w-full max-w-7xl mx-auto">
+	<nav aria-label="Breadcrumb">
+		<ol class="flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400">
+			<li>
+				<a href="<?php echo $view->e('breadcrumb.home.url');?>" class="hover:text-blue-600 transition-colors">
+					<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+							d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+					</svg>
+				</a>
+			</li>
+			<li><span class="mx-1">/</span></li>
+			<li>
+				<a href="<?php echo $view->e('breadcrumb.list.url');?>" class="hover:text-blue-600 transition-colors">
+					<?php echo $view->e('breadcrumb.list.name');?>
+				</a>
+			</li>
+			<li><span class="mx-1">/</span></li>
+			<li class="font-bold text-gray-900 dark:text-white">
+				<?php echo $view->e('breadcrumb.title.name');?>
+			</li>
+		</ol>
+	</nav>
+</div>
+
+<div class="flex justify-center w-full px-4 sm:px-0">
+	<div class="w-full max-w-7xl glass-panel rounded-2xl p-8 mb-12 shadow-2xl">
+		<h2 class="text-xl font-bold mb-8 text-gray-900 dark:text-white flex items-center">
+			<span
+				class="p-2 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-lg mr-3 shadow-inner">
+				<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+						d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+				</svg>
+			</span>
+			<?php echo $view->e('breadcrumb.title.name');?>
+		</h2>
+
+		<form class="ajax-form space-y-10" action="<?php echo $view->e('action');?>" method="post" id="form">
+			<input type="hidden" name="_csrf_token" value="<?php echo $view->e('csrf_token');?>">
+
+			<!-- Basic Information Section -->
+			<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+				<?php foreach ($view->iterate('group_common_authority') as $item){ ?>
+				<div class="space-y-2">
+					<label
+						class="block text-xs font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest pl-1">
+						<?php echo $item->e('language');?>
+					</label>
+					<div class="relative">
+						<input type="text" name="<?php echo $item->raw('name');?>"
+							class="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white/50 dark:bg-slate-800/50 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all text-sm font-bold"
+							placeholder="<?php echo $item->e('language');?>" value="<?php echo $item->e('value');?>" />
+					</div>
+				</div>
+				<?php } ?>
+			</div>
+
+			<!-- Permissions Sections -->
+			<?php
+			$sections = [
+				['lang_key' => 'user_authority', 'data_key' => 'group_user_authority', 'color' => 'blue'],
+				['lang_key' => 'manage_authority', 'data_key' => 'group_manage_authority', 'color' => 'amber'],
+				['lang_key' => 'system_authority', 'data_key' => 'group_system_authority', 'color' => 'rose']
+			];
+			foreach($sections as $sec) {
+			?>
+			<div class="space-y-6">
+				<div class="flex items-center gap-4">
+					<h3 class="text-sm font-black text-gray-900 dark:text-white uppercase tracking-[0.2em]">
+						<?php echo $view->e('language.' . $sec['lang_key']);?>
+					</h3>
+					<div class="flex-1 h-px bg-gradient-to-r from-gray-200 dark:from-gray-700 to-transparent"></div>
+				</div>
+
+				<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+					<?php foreach($view->iterate($sec['data_key']) as $item) { ?>
+					<label
+						class="group relative flex items-center p-3 sm:p-4 rounded-xl border border-gray-100 dark:border-gray-800 bg-white/30 dark:bg-white/5 hover:bg-gray-50 dark:hover:bg-white/10 transition-all cursor-pointer">
+						<div class="flex items-center group cursor-pointer">
+							<input type="checkbox" id="<?php echo $item->raw('name'); ?>"
+								name="<?php echo $item->raw('name'); ?>" value="1"
+								<?php if ($item->get('value')){echo 'checked="checked"';} ?> class="mr-3" />
+							<span
+								class="text-xs font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider group-hover:text-gray-900 dark:group-hover:text-white transition-colors">
+								<?php echo $item->e('language'); ?>
+							</span>
+						</div>
+					</label>
+					<?php } ?>
+				</div>
+			</div>
+			<?php } ?>
+
+			<!-- Submit Button -->
+			<div class="pt-8 border-t border-gray-100 dark:border-gray-800">
+				<button type="submit"
+					class="w-full py-4 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white font-black uppercase tracking-widest text-xs rounded-xl shadow-xl shadow-indigo-500/30 transition-all transform active:scale-[0.98] flex items-center justify-center">
+					<?php echo $view->e('language.submit');?>
+				</button>
+			</div>
+		</form>
+	</div>
+</div>
+
+<?php include Compile::include(APP_PATH . 'app/views/admin/footer.inc.htm');?>
+<script ajax-eval="true">
+	/*30分钟token失效，刷新页面*/
+	setTimeout(() => {
+		window.location.reload();
+	}, 1800000);
+</script>

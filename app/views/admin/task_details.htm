@@ -1,0 +1,192 @@
+<?php use App\Core\Compile;?>
+<?php include Compile::include(APP_PATH.'app/views/admin/header.inc.htm');?>
+<?php $task = $view->get('task'); ?>
+<?php $csrfToken = $view->e('csrf_token'); ?>
+
+<!-- Actions Bar -->
+<div class="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4 w-full max-w-7xl mx-auto">
+	<div class="flex items-center space-x-3">
+		<a href="<?php echo $view->get('operation_links.back.url');?>"
+			class="flex items-center text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 transition-colors">
+			<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+			</svg>
+			<span class="ml-1 font-bold"><?php echo $view->get('operation_links.back.label'); ?></span>
+		</a>
+		<h2 class="text-xl font-bold text-gray-900 dark:text-white">Task Details</h2>
+	</div>
+
+	<div class="flex items-center space-x-3 w-full sm:w-auto">
+		<?php if (!empty($task['action_buttons'])) { foreach($task['action_buttons'] as $action) { ?>
+		<?php if ($action['type'] === 'button') { ?>
+		<button type="button" class="<?php echo $action['class']; ?>" data-url="<?php echo $action['url']; ?>"
+			<?php echo $action['attr']; ?>>
+			<?php echo $action['label']; ?>
+		</button>
+		<?php } else if ($action['type'] === 'link') { ?>
+		<a href="<?php echo $action['url']; ?>" class="<?php echo $action['class']; ?>" <?php echo $action['attr']; ?>>
+			<?php echo $action['label']; ?>
+		</a>
+		<?php } ?>
+		<?php }} ?>
+	</div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 w-full max-w-7xl mx-auto">
+	<!-- Main Info -->
+	<div class="lg:col-span-2 space-y-6">
+		<div class="glass-panel rounded-2xl p-8">
+			<h3 class="text-lg font-bold text-gray-900 dark:text-white mb-6 flex items-center">
+				<svg class="w-5 h-5 mr-2 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+						d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+				</svg>
+				Basic Information
+			</h3>
+
+			<div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+				<div class="space-y-1">
+					<span
+						class="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider"><?php echo $view->get('language.task_id'); ?></span>
+					<p class="text-lg font-mono font-bold text-gray-900 dark:text-white"><?php echo $view->e('task.id'); ?></p>
+				</div>
+				<div class="space-y-1">
+					<span
+						class="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider"><?php echo $view->get('language.status'); ?></span>
+					<div>
+						<span class="px-3 py-1 text-xs font-bold rounded-lg <?php echo $task['status_class']; ?>">
+							<?php echo $task['status_label']; ?>
+						</span>
+					</div>
+				</div>
+				<div class="space-y-1 md:col-span-2">
+					<span
+						class="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider"><?php echo $view->get('language.class_name'); ?></span>
+					<p class="text-base font-medium text-gray-900 dark:text-white"><?php echo $view->e('task.class_name'); ?>
+					</p>
+				</div>
+				<div class="space-y-1">
+					<span
+						class="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider"><?php echo $view->get('language.method_name'); ?></span>
+					<p class="text-base font-medium text-gray-900 dark:text-white">
+						<?php echo $task['method_display']; ?></p>
+				</div>
+				<div class="space-y-1">
+					<span
+						class="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider"><?php echo $view->get('language.priority'); ?></span>
+					<p class="text-base font-medium text-gray-900 dark:text-white">
+						P<?php echo $task['priority'] ?? '5'; ?></p>
+				</div>
+			</div>
+		</div>
+
+		<div class="glass-panel rounded-2xl p-8">
+			<h3 class="text-lg font-bold text-gray-900 dark:text-white mb-6 flex items-center">
+				<svg class="w-5 h-5 mr-2 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+						d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path>
+				</svg>
+				Execution Context & Arguments
+			</h3>
+
+			<div
+				class="bg-gray-50/50 dark:bg-slate-800/50 rounded-xl p-4 border border-gray-100 dark:border-gray-700 shadow-inner">
+				<pre class="text-xs font-mono text-gray-700 dark:text-gray-300 overflow-x-auto whitespace-pre-wrap">
+					<?php echo $view->e('task.formatted_args'); ?>
+				</pre>
+			</div>
+
+			<?php if (!empty($task['error'])) { ?>
+			<div class="mt-6 p-4 rounded-xl bg-red-50 dark:bg-red-900/10 border border-red-100 dark:border-red-900/30">
+				<h4 class="text-xs font-bold text-red-600 dark:text-red-400 uppercase tracking-wider mb-2">Error Log
+				</h4>
+				<p class="text-sm font-medium text-red-700 dark:text-red-300">
+					<?php echo $view->e('task.error_display'); ?></p>
+			</div>
+			<?php } ?>
+		</div>
+	</div>
+
+	<!-- Sidebar Info -->
+	<div class="space-y-6">
+		<div class="glass-panel rounded-2xl p-6">
+			<h3 class="text-sm font-bold text-gray-900 dark:text-white mb-4 uppercase tracking-widest">Timing</h3>
+			<div class="space-y-4">
+				<div class="flex flex-col">
+					<span
+						class="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase"><?php echo $view->get('language.created_at'); ?></span>
+					<span
+						class="text-sm font-medium text-gray-700 dark:text-gray-300"><?php echo $task['formatted_created_at']; ?></span>
+				</div>
+				<div class="flex flex-col">
+					<span
+						class="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase"><?php echo $view->get('language.scheduled_at'); ?></span>
+					<span
+						class="text-sm font-medium text-gray-700 dark:text-gray-300"><?php echo $task['formatted_scheduled_at']; ?></span>
+				</div>
+				<div class="flex flex-col">
+					<span
+						class="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase"><?php echo $view->get('language.updated_at'); ?></span>
+					<span
+						class="text-sm font-medium text-gray-700 dark:text-gray-300"><?php echo $task['formatted_updated_at']; ?></span>
+				</div>
+			</div>
+		</div>
+
+		<div
+			class="glass-panel rounded-2xl p-6 bg-gradient-to-br from-indigo-50/50 to-white dark:from-indigo-900/10 dark:to-slate-800/50 border-indigo-100/50 dark:border-indigo-900/20">
+			<h3 class="text-sm font-bold text-indigo-900 dark:text-indigo-300 mb-4 uppercase tracking-widest">
+				<?php echo $view->get('language.retry_info'); ?></h3>
+			<div class="grid grid-cols-2 gap-4">
+				<div>
+					<span
+						class="text-[10px] font-bold text-indigo-400 uppercase"><?php echo $view->get('language.retry'); ?></span>
+					<p class="text-xl font-bold text-indigo-600 dark:text-indigo-400">
+						<?php echo $task['retry'] ?? 0; ?></p>
+				</div>
+				<div>
+					<span
+						class="text-[10px] font-bold text-indigo-400 uppercase"><?php echo $view->get('language.max_retries'); ?></span>
+					<p class="text-xl font-bold text-indigo-600 dark:text-indigo-400">
+						<?php echo $task['max_retries'] ?? 0; ?></p>
+				</div>
+				<div class="col-span-2">
+					<span
+						class="text-[10px] font-bold text-indigo-400 uppercase"><?php echo $view->get('language.retry_delay'); ?></span>
+					<p class="text-sm font-bold text-indigo-600 dark:text-indigo-400">
+						<?php echo $task['retry_delay_seconds']; ?></p>
+				</div>
+			</div>
+		</div>
+
+		<?php if (!empty($task['callbackUrl'])) { ?>
+		<div class="glass-panel rounded-2xl p-6">
+			<h3 class="text-sm font-bold text-gray-900 dark:text-white mb-4 uppercase tracking-widest">
+				<?php echo $view->get('language.callback'); ?></h3>
+			<div class="space-y-3">
+				<div class="flex flex-col">
+					<span
+						class="text-[10px] font-bold text-gray-400 uppercase"><?php echo $view->get('language.callback_url'); ?></span>
+					<span
+						class="text-xs font-mono break-all text-blue-600 dark:text-blue-400"><?php echo $view->e('task.callback_url_display'); ?></span>
+				</div>
+				<div class="flex flex-col">
+					<span
+						class="text-[10px] font-bold text-gray-400 uppercase"><?php echo $view->get('language.callback_method'); ?></span>
+					<span class="text-sm font-bold"><?php echo $task['callback_method_display']; ?></span>
+				</div>
+			</div>
+		</div>
+		<?php } ?>
+	</div>
+</div>
+
+<?php include Compile::include(APP_PATH . 'app/views/admin/footer.inc.htm');?>
+<script ajax-eval="true">
+	new GlobalFormHandler(".ajax-form", {
+		loadingText: "<?php echo $view->get('language.operating'); ?>",
+		modalSize: "md",
+		modalPosition: "center",
+		timeout: 2
+	});
+</script>

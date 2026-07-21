@@ -1,0 +1,581 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+/**
+ * ===========================================================================
+ *  WellCMS 线上分区表迁移脚本  v1.0
+ * ===========================================================================
+ *
+ * ┌──────────────────────────────────────────────────────────────────┐
+ * │ 何时使用                                                         │
+ * │                                                                  │
+ * │ 当 DBA 需要逐条审查迁移 SQL 时使用此脚本。                           │
+ * │ maintain() 内部已自带自动发现，日常不需要此脚本。                    │
+ * │                                                                  │
+ * │ 对比三个脚本：                                                     │
+ * │                                                                  │
+ * │ bin/partition                                                     │
+ * │   日常维护 / 单表维护。maintain() 内部已自动发现存量表。              │
+ * │   点击后台「执行维护」按钮效果相同。                                  │
+ * │   使用场景：手动触发、单表维护 --table=forum_thread                 │
+ * │                                                                  │
+ * │ bin/migrate-partitions                                            │
+ * │   首次部署时手动接管（已很少需要，maintain() 已自带自动发现）。         │
+ * │   --discover-only 可只注册不维护。                                  │
+ * │                                                                  │
+ * │ bin/migrate-partitions-prod ← 你现在在这里                         │
+ * │   DBA 审查模式，--audit 输出每条 DDL 语句。                        │
+ * │   只有需要 DBA 审批的正式环境才用此脚本。                             │
+ * │   默认不修改数据库，需显式 --execute。                               │
+ * └──────────────────────────────────────────────────────────────────┘
+ *
+ * 使用流程：
+ *   Step 0: 阅读本文档，确认维护窗口
+ *   Step 1: php bin/migrate-partitions-prod --audit          # 输出迁移计划 SQL
+ *   Step 2: DBA 审查输出的 SQL 语句
+ *   Step 3: php bin/migrate-partitions-prod --execute         # 执行迁移
+ *   Step 4: php bin/migrate-partitions-prod --verify          # 验证结果
+ *
+ * 安全设计：
+ *   - 默认不修改数据库，需显式 --execute 确认
+ *   - --audit 模式输出每条 DDL 语句，供 DBA 逐条审查
+ *   - 每张表独立 try/catch，单表失败不阻塞其他表
+ *   - pid 文件锁防重入 + Redis 分布式锁防并发
+ *   - createFreshConnection() 钉住专用连接执行 DDL
+ *   - DDL 超时保护 (lock_wait_timeout=10, innodb_lock_wait_timeout=10)
+ *
+ * 维护窗口建议：
+ *   执行 --execute 应在业务低峰期（建议凌晨 02:00-05:00）
+ *   REORGANIZE PARTITION 对 pmax 的操作会持有 MDL，可能造成毫秒级写入阻塞
+ *
+ * 回滚方案：
+ *   如果迁移后发现分区创建错误，可以：
+ *     a) 删除错误创建的分区：ALTER TABLE t DROP PARTITION p2027Q1;
+ *     b) 恢复 pmax：ALTER TABLE t REORGANIZE PARTITION p2027Q1 INTO (PARTITION pmax VALUES LESS THAN MAXVALUE);
+ *     c) 清除注册：php -r "\$c = include 'app/Bootstrap.php'; \$c->get(\PartitionManager::class)->unregister('table_name');"
+ *
+ * PHP 7.2 兼容。
+ */
+
+// ========== 防重入锁 ==========
+$lockFile = sys_get_temp_dir() . '/partition_migrate_prod.lock';
+$lockFp = fopen($lockFile, 'c');
+if (!$lockFp || !flock($lockFp, LOCK_EX | LOCK_NB)) {
+    fwrite(STDERR, "ERROR: 另一个迁移进程正在运行 (锁文件: {$lockFile})\n");
+    exit(1);
+}
+
+// ========== 环境初始化 ==========
+define('IN_WELLCMS', true);
+define('APP_PATH', str_replace('\\', DIRECTORY_SEPARATOR, dirname(__DIR__)) . DIRECTORY_SEPARATOR);
+define('DEBUG', 1);
+
+if (DEBUG) {
+    error_reporting(E_ALL);
+    ini_set('display_errors', '1');
+} else {
+    error_reporting(E_ALL & ~E_NOTICE & ~E_DEPRECATED);
+    ini_set('display_errors', '0');
+}
+
+require APP_PATH . 'app/Core/Compile.php';
+require APP_PATH . 'app/Core/Autoload.php';
+
+// ========== 解析参数 ==========
+$validModes = array('--audit', '--execute', '--verify', '--help');
+$mode = '--audit'; // 默认模式：审计，不改数据
+$tableFilter = null;
+
+foreach ($argv as $i => $arg) {
+    if ($i === 0) continue;
+    if (in_array($arg, $validModes)) {
+        $mode = $arg;
+    } elseif (strncmp($arg, '--table=', 8) === 0) {
+        $tableFilter = substr($arg, 8);
+    }
+}
+
+if ($mode === '--help') {
+    echo <<<HELP
+用法: php bin/migrate-partitions-prod [选项]
+
+选项:
+  --audit             审计模式（默认）：输出迁移计划 SQL，不改数据库
+  --execute           执行模式：确认并执行迁移（需先 --audit 审查）
+  --verify            验证模式：检查分区创建结果
+  --table=forum_thread 限定单表（可与 --audit/--execute 组合）
+  --help              显示本帮助
+
+典型流程:
+  # 1. 审查 SQL
+  php bin/migrate-partitions-prod --audit
+
+  # 2. DBA 确认后执行
+  php bin/migrate-partitions-prod --execute
+
+  # 3. 验证
+  php bin/migrate-partitions-prod --verify
+
+  # 单表迁移（灰度）
+  php bin/migrate-partitions-prod --table=forum_thread --execute
+
+HELP;
+    exit(0);
+}
+
+// ========== 初始化容器 ==========
+try {
+    $container = \App\Bootstrap::init();
+} catch (\Throwable $e) {
+    fwrite(STDERR, "FATAL: Bootstrap 初始化失败: " . $e->getMessage() . "\n");
+    exit(1);
+}
+
+$pm = $container->get(\Framework\Database\Partition\PartitionManager::class);
+$db = $container->get(\Framework\Database\Interfaces\DatabaseInterface::class);
+$logger = $container->get(\Framework\Logger\LoggerInterface::class);
+
+$exitCode = 0;
+$startTime = microtime(true);
+
+// ========== 辅助函数 ==========
+function write(string $msg): void
+{
+    echo $msg . "\n";
+}
+
+function success(string $msg): void
+{
+    echo "  ✓ {$msg}\n";
+}
+
+function warn(string $msg): void
+{
+    echo "  ⚠ {$msg}\n";
+}
+
+function fail(string $msg): void
+{
+    echo "  ✗ {$msg}\n";
+}
+
+function hr(): void
+{
+    echo str_repeat('-', 60) . "\n";
+}
+
+function timestamp(): string
+{
+    return date('Y-m-d H:i:s');
+}
+
+function formatMs(float $ms): string
+{
+    return number_format($ms, 1) . ' ms';
+}
+
+// ========== 标题 ==========
+echo "\n";
+echo "  ╔══════════════════════════════════════════════════════════╗\n";
+echo "  ║     WellCMS 线上分区表迁移脚本                          ║\n";
+echo "  ║     版本 1.0                                           ║\n";
+echo "  ╚══════════════════════════════════════════════════════════╝\n";
+echo "\n";
+echo "  开始时间: " . timestamp() . "\n";
+echo "  运行模式: {$mode}\n";
+if ($tableFilter) {
+    echo "  限定表:   {$tableFilter}\n";
+}
+echo "\n";
+
+// ========== 模式派发 ==========
+if ($mode === '--audit') {
+    doAudit($pm, $db, $tableFilter);
+} elseif ($mode === '--execute') {
+    doExecute($pm, $db, $logger, $tableFilter);
+} elseif ($mode === '--verify') {
+    doVerify($pm, $db, $tableFilter);
+}
+
+// ========== 释放锁 ==========
+$elapsed = (microtime(true) - $startTime) * 1000;
+echo "\n  完成时间: " . timestamp() . " (耗时 " . formatMs($elapsed) . ")\n";
+echo "\n";
+flock($lockFp, LOCK_UN);
+fclose($lockFp);
+exit($exitCode);
+
+// ==========================================================================
+//  模式实现
+// ==========================================================================
+
+/**
+ * --audit: 审计模式，输出迁移计划 SQL，不修改数据库。
+ */
+function doAudit($pm, $db, ?string $tableFilter): void
+{
+    echo "  ══════════════════════════════════════════════════════════\n";
+    echo "  第一步：环境预检\n";
+    echo "  ══════════════════════════════════════════════════════════\n\n";
+
+    // 1.1 MySQL 版本检查
+    $version = '';
+    try {
+        $pdo = $db->createFreshConnection('master');
+        $stmt = $pdo->query("SELECT VERSION()");
+        $version = (string)$stmt->fetchColumn();
+    } catch (\Throwable $e) {
+        $version = 'unknown';
+    }
+    write("  MySQL 版本: {$version}");
+    if (version_compare($version, '5.7.0', '<')) {
+        fail("MySQL 5.7 以下版本不支持 RANGE 分区管理，请升级。");
+    } elseif (version_compare($version, '8.0.0', '<')) {
+        warn("MySQL 5.7 支持基本分区操作，但 SUBPARTITION_COUNT 不可用。已适配。");
+    } else {
+        success("MySQL 版本满足要求。");
+    }
+
+    // 1.2 分区支持检查
+    $hasPartition = false;
+    try {
+        $stmt = $pdo->query("SHOW PLUGINS WHERE Name = 'partition'");
+        $row = $stmt->fetch(\PDO::FETCH_ASSOC);
+        $hasPartition = ($row && $row['Status'] === 'ACTIVE');
+    } catch (\Throwable $e) {
+        $hasPartition = false;
+    }
+    if ($hasPartition) {
+        success("分区插件已启用。");
+    } else {
+        warn("无法确认分区插件状态（可能已内置），继续执行。");
+    }
+
+    echo "\n";
+    hr();
+
+    // 1.3 数据库时区检查
+    echo "\n  环境信息:\n";
+    try {
+        $stmt = $pdo->query("SELECT @@system_time_zone, @@time_zone");
+        $tz = $stmt->fetch(\PDO::FETCH_NUM);
+        write("  系统时区: {$tz[0]}, 会话时区: {$tz[1]}");
+    } catch (\Throwable $e) {
+        // ignore
+    }
+
+    // ========================================
+    //  第二步：扫描存量分区表并输出计划
+    // ========================================
+    echo "\n";
+    echo "  ══════════════════════════════════════════════════════════\n";
+    echo "  第二步：扫描存量 RANGE 分区表\n";
+    echo "  ══════════════════════════════════════════════════════════\n\n";
+
+    $newCount = $pm->adoptExistingTables();
+    $totalCount = count($pm->getStatus());
+    if ($totalCount === 0) {
+        warn("未发现 RANGE 分区表。请确认数据库已安装 well_forum。");
+        return;
+    }
+    if ($newCount > 0) {
+        success("发现 {$newCount} 张新的分区表。");
+    }
+    success("已接管 {$totalCount} 张 RANGE 分区表。\n");
+
+    // ========================================
+    //  第三步：输出每张表的迁移计划
+    // ========================================
+    echo "  ══════════════════════════════════════════════════════════\n";
+    echo "  第三步：迁移计划（以下 SQL 将在执行模式下运行）\n";
+    echo "  ══════════════════════════════════════════════════════════\n\n";
+
+    $status = $pm->getStatus();
+    $currentTime = time();
+    $planTotal = 0;
+
+    foreach ($status as $table => $config) {
+        if ($tableFilter && $table !== $tableFilter) {
+            continue;
+        }
+
+        $fullName = 'well_' . $table;
+        $subInfo = '';
+        if ($config['sub_partitions'] > 0) {
+            $subInfo = sprintf(' + SUBPARTITION BY HASH (%s) %d SUBPARTITIONS',
+                $config['sub_partition'], $config['sub_partitions']);
+        }
+        write("  表: {$fullName}{$subInfo}");
+        write("  当前分区:");
+
+        // 查询当前分区信息
+        try {
+            $pdo2 = $db->createFreshConnection('master');
+            $dbName = '';
+            $stmt = $pdo2->query("SELECT DATABASE()");
+            $dbName = (string)$stmt->fetchColumn();
+
+            $stmt = $pdo2->query("
+                SELECT PARTITION_NAME, PARTITION_DESCRIPTION, TABLE_ROWS
+                FROM information_schema.PARTITIONS
+                WHERE TABLE_SCHEMA = " . $pdo2->quote($dbName) . "
+                  AND TABLE_NAME = " . $pdo2->quote($fullName) . "
+                  AND PARTITION_NAME IS NOT NULL
+                  AND PARTITION_DESCRIPTION IS NOT NULL
+                GROUP BY PARTITION_NAME, PARTITION_DESCRIPTION, PARTITION_ORDINAL_POSITION
+                ORDER BY MIN(PARTITION_ORDINAL_POSITION) ASC
+            ");
+            $partitions = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+
+            if (empty($partitions)) {
+                warn("  (无分区信息)");
+            } else {
+                foreach ($partitions as $p) {
+                    $desc = $p['partition_description'] === 'MAXVALUE'
+                        ? 'MAXVALUE'
+                        : date('Y-m-d', (int)$p['partition_description']);
+                    $rows = $p['table_rows'] ?? '?';
+                    write("    - {$p['partition_name']} < {$desc} (约 {$rows} 行)");
+                }
+            }
+
+            // 计算需要创建的分区
+            $now = time();
+            $needCreate = array();
+            $boundary = 0;
+            foreach ($partitions as $p) {
+                if ($p['partition_description'] !== 'MAXVALUE') {
+                    $b = (int)$p['partition_description'];
+                    if ($b > $boundary) $boundary = $b;
+                }
+            }
+
+            // 计算所需 advanceCount (4) 个未来分区
+            $expected = 0;
+            $b = $boundary;
+            for ($i = 0; $i < $config['advance_count']; $i++) {
+                $nextB = \Framework\Database\Partition\PartitionPeriod::nextBoundary(
+                    $b > 0 ? $b : $now,
+                    $config['period']
+                );
+                if ($nextB <= $b) break;
+                $name = \Framework\Database\Partition\PartitionPeriod::formatName(
+                    $nextB,
+                    $config['period']
+                );
+                $needCreate[] = array('name' => $name, 'boundary' => $nextB);
+                $b = $nextB;
+                $expected = $nextB;
+            }
+
+            if (!empty($needCreate)) {
+                foreach ($needCreate as $nc) {
+                    $planTotal++;
+                    $boundaryDate = date('Y-m-d', $nc['boundary']);
+                    $partitionSql = sprintf(
+                        "ALTER TABLE `%s` REORGANIZE PARTITION pmax INTO (\n" .
+                        "  PARTITION `%s` VALUES LESS THAN (%d),\n" .
+                        "  PARTITION pmax VALUES LESS THAN MAXVALUE\n" .
+                        ");",
+                        $fullName,
+                        $nc['name'],
+                        $nc['boundary']
+                    );
+                    write("\n  >> {$nc['name']} (< {$boundaryDate})");
+                    write("     SQL: {$partitionSql}");
+                }
+            } else {
+                write("  >> 已满足未来分区要求，无需新建。");
+            }
+
+        } catch (\Throwable $e) {
+            fail("查询失败: " . $e->getMessage());
+        }
+        echo "\n";
+    }
+
+    echo "  ══════════════════════════════════════════════════════════\n";
+    echo "  迁移计划摘要\n";
+    echo "  ══════════════════════════════════════════════════════════\n\n";
+    write("  涉及表数量: " . count($status));
+    write("  需新建分区: {$planTotal}");
+    write("  影响说明: 每张表的 REORGANIZE PARTITION 操作将在低峰期执行，");
+    write("           MySQL 会对 pmax 分区短暂持有 MDL 锁。");
+    write("           建议在业务低峰期（凌晨）执行 --execute。\n");
+
+    if ($planTotal > 0) {
+        warn("  未执行任何修改。请审查上述 SQL 后运行: php bin/migrate-partitions-prod --execute");
+    } else {
+        success("所有表分区已满足要求，无需迁移。");
+    }
+}
+
+/**
+ * --execute: 执行模式，执行迁移。
+ */
+function doExecute($pm, $db, $logger, ?string $tableFilter): void
+{
+    echo "  ══════════════════════════════════════════════════════════\n";
+    echo "  执行模式：将执行分区 DDL\n";
+    echo "  ══════════════════════════════════════════════════════════\n\n";
+
+    // 确认提示
+    if (PHP_SAPI === 'cli') {
+        echo "  即将对数据库执行分区迁移 DDL。\n";
+        echo "  建议在业务低峰期（凌晨 02:00-05:00）运行。\n";
+        echo "  请确认已通过 --audit 审查迁移计划。\n\n";
+        echo "  输入 YES 继续: ";
+        $handle = fopen('php://stdin', 'r');
+        $input = trim(fgets($handle));
+        fclose($handle);
+        if ($input !== 'YES') {
+            echo "\n  已取消。\n";
+            return;
+        }
+    }
+
+    // 先注册存量表（幂等，重复调用安全）
+    $count = $pm->adoptExistingTables();
+    if ($count === 0 && !$tableFilter) {
+        warn("未发现 RANGE 分区表，跳过。");
+        return;
+    }
+    success("注册完成，当前管理 {$count} 张表（含新增）。\n");
+
+    // 获取维护结果
+    $dryRun = false;
+    $result = $pm->maintain($dryRun);
+
+    echo "\n  执行结果:\n";
+    success("扫描表: {$result->tablesScanned}");
+    success("新建分区: {$result->partitionsCreated}");
+    success("删除分区: {$result->partitionsDropped}");
+    if ($result->errors > 0) {
+        fail("错误数: {$result->errors}");
+        foreach ($result->errorDetails as $err) {
+            fail("[{$err['table']}] {$err['error']}");
+        }
+        $exitCode = 1;
+    } else {
+        success("错误数: 0");
+    }
+    write("  耗时: " . formatMs($result->executionMs) . "\n");
+
+    $logger->info('migrate-partitions-prod execute completed', array(
+        'tables_scanned'     => $result->tablesScanned,
+        'partitions_created' => $result->partitionsCreated,
+        'partitions_dropped' => $result->partitionsDropped,
+        'errors'             => $result->errors,
+        'execution_ms'       => round($result->executionMs, 2),
+    ));
+
+    if ($result->errors === 0) {
+        success("迁移执行完成。建议运行 --verify 验证。");
+    } else {
+        fail("迁移执行完成，但有错误。请排查后重试。");
+    }
+}
+
+/**
+ * --verify: 验证模式，检查分区创建结果。
+ */
+function doVerify($pm, $db, ?string $tableFilter): void
+{
+    echo "  ══════════════════════════════════════════════════════════\n";
+    echo "  验证模式：检查分区创建结果\n";
+    echo "  ══════════════════════════════════════════════════════════\n\n";
+
+    $status = $pm->getStatus();
+    if (empty($status)) {
+        warn("注册表中无数据。请先运行 --audit 或 --execute。");
+        return;
+    }
+
+    $pdo = $db->createFreshConnection('master');
+    $stmt = $pdo->query("SELECT DATABASE()");
+    $dbName = (string)$stmt->fetchColumn();
+
+    $allOk = true;
+    $now = time();
+    $nextQuarterBoundary = \Framework\Database\Partition\PartitionPeriod::nextBoundary($now, 'quarter');
+
+    foreach ($status as $table => $config) {
+        if ($tableFilter && $table !== $tableFilter) {
+            continue;
+        }
+
+        $fullName = 'well_' . $table;
+        write("  表: {$fullName}");
+
+        try {
+            $stmt = $pdo->query("
+                SELECT PARTITION_NAME, PARTITION_DESCRIPTION, PARTITION_ORDINAL_POSITION,
+                       TABLE_ROWS
+                FROM information_schema.PARTITIONS
+                WHERE TABLE_SCHEMA = " . $pdo->quote($dbName) . "
+                  AND TABLE_NAME = " . $pdo->quote($fullName) . "
+                  AND PARTITION_NAME IS NOT NULL
+                  AND PARTITION_DESCRIPTION IS NOT NULL
+                GROUP BY PARTITION_NAME, PARTITION_DESCRIPTION, PARTITION_ORDINAL_POSITION
+                ORDER BY MIN(PARTITION_ORDINAL_POSITION) ASC
+            ");
+            $parts = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+
+            if (empty($parts)) {
+                fail("无分区信息");
+                $allOk = false;
+                continue;
+            }
+
+            $hasPmax = false;
+            $maxBoundary = 0;
+            $foundFuture = false;
+
+            foreach ($parts as $p) {
+                $desc = $p['partition_description'];
+                $name = $p['partition_name'];
+                if ($desc === 'MAXVALUE') {
+                    $hasPmax = true;
+                    write("    {$name}: MAXVALUE (安全网)");
+                    continue;
+                }
+                $boundary = (int)$desc;
+                $date = date('Y-m-d', $boundary);
+                $rows = $p['table_rows'] ?? '?';
+                $mark = '';
+                if ($boundary > $nextQuarterBoundary) {
+                    $mark = ' ← 未来分区 ✓';
+                    $foundFuture = true;
+                }
+                write("    {$name}: < {$date} ({$rows} 行){$mark}");
+                if ($boundary > $maxBoundary) {
+                    $maxBoundary = $boundary;
+                }
+            }
+
+            if (!$hasPmax) {
+                fail("缺少 pmax 安全分区");
+                $allOk = false;
+            }
+            if (!$foundFuture) {
+                warn("无可用的未来分区（pmax 将在下一个周期被拆分）");
+            } else {
+                success("未来分区已就绪");
+            }
+
+        } catch (\Throwable $e) {
+            fail("查询失败: " . $e->getMessage());
+            $allOk = false;
+        }
+        echo "\n";
+    }
+
+    echo "  ══════════════════════════════════════════════════════════\n";
+    if ($allOk) {
+        success("所有表分区状态正常。");
+    } else {
+        fail("部分表分区状态异常，请排查。");
+    }
+}

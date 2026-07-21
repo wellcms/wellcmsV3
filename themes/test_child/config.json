@@ -1,0 +1,17 @@
+{
+    "name": "Test Child Theme",
+    "dir": "test_child",
+    "version": "1.0.0",
+    "brief": "A child theme that depends on Test Parent Theme.",
+    "author": "WellCMS Team",
+    "domain": "http://wellcms.com",
+    "installed": 0,
+    "enable": 0,
+    "type": 2,
+    "dependencies": {
+        "core": "3.0"
+    },
+    "dependencies_theme": {
+        "test_parent": "1.0.0"
+    }
+}

@@ -1,0 +1,274 @@
+<?php
+
+declare(strict_types=1);
+/*
+ * Copyright (C) www.wellcms.com
+ */
+
+namespace Framework\Database\Partition;
+
+use Framework\Database\Interfaces\DatabaseInterface;
+use Framework\Cache\Interfaces\CacheInterface;
+
+/**
+ * 分区注册表管理。
+ *
+ * 职责：
+ * 1. 存储已注册表的配置清单（缓存驱动持久化）
+ * 2. 首次运行时扫描 information_schema 发现存量分区表，补充注册
+ * 3. 提供清单给 PartitionManager::maintain() 遍历
+ *
+ * 设计原理：
+ * - 不新增数据库表来存储注册信息（避免"DDL 管理 DDL"的递归）
+ * - 注册信息本质上是编译时声明，非运行时数据
+ * - 缓存丢失时通过 discoverExisting() 从 information_schema 自动恢复
+ *
+ * PHP 7.2 兼容：不使用 typed properties / union types / named arguments。
+ *
+ * 线程安全说明（Swoole）：
+ * - register() 只在 install.php 中调用（非请求生命周期），协程安全
+ * - getAll() 在请求中读取缓存，协程间仅共享缓存连接，无写冲突
+ */
+class PartitionRegistry
+{
+    const CACHE_KEY = 'partition_registry_configs';
+
+    /** @var CacheInterface */
+    private $cache;
+
+    /** @var DatabaseInterface */
+    private $db;
+
+    /** @var PartitionDialectInterface */
+    private $dialect;
+
+    /**
+     * @param CacheInterface                 $cache
+     * @param DatabaseInterface              $db
+     * @param PartitionDialectInterface|null $dialect 分区方言（null 时自动检测）
+     */
+    public function __construct(
+        CacheInterface $cache,
+        DatabaseInterface $db,
+        ?PartitionDialectInterface $dialect = null
+    ) {
+        $this->cache = $cache;
+        $this->db = $db;
+        $this->dialect = $dialect ?? PartitionDialectFactory::createFromConnection($db);
+    }
+
+    /**
+     * 注册一张表的分区配置。
+     * 由插件 install.php 或主程序启动时调用。
+     * 幂等：同一 table 重复调用以后者为准。
+     *
+     * @param PartitionConfig $config
+     * @return void
+     */
+    public function register(PartitionConfig $config)
+    {
+        $all = $this->loadAll();
+        $all[$config->table] = $config;
+        $this->saveAll($all);
+    }
+
+    /**
+     * 获取所有已注册的分区配置。
+     *
+     * @return array<string, PartitionConfig> 以 table 名为键
+     */
+    public function getAll(): array
+    {
+        return $this->loadAll();
+    }
+
+    /**
+     * 根据表名获取分区配置。
+     *
+     * @param string $table 纯表名
+     * @return PartitionConfig|null
+     */
+    public function get(string $table)
+    {
+        $all = $this->loadAll();
+        return isset($all[$table]) ? $all[$table] : null;
+    }
+
+    /**
+     * 注销一张表的分区管理。
+     * 由插件 uninstall.php 调用。
+     *
+     * @param string $table
+     * @return void
+     */
+    public function unregister(string $table)
+    {
+        $all = $this->loadAll();
+        if (isset($all[$table])) {
+            unset($all[$table]);
+            $this->saveAll($all);
+        }
+    }
+
+    /**
+     * 扫描 information_schema 发现存量 RANGE 分区表，
+     * 自动为其创建默认配置。
+     * 首次部署 PartitionManager 时用于接管现有分区表。
+     *
+     * @param string $prefix 表前缀（如 'well_'），用于 information_schema 匹配
+     * @return int 发现的存量分区表数量
+     */
+    public function discoverExisting(string $prefix): int
+    {
+        $prefixEscaped = str_replace('_', '\\_', $prefix);
+        $pdo = $this->db->createFreshConnection('master');
+
+        if ($pdo->getAttribute(\PDO::ATTR_DRIVER_NAME) === 'pgsql') {
+            // PG 实现：从 pg_class 查询分区表
+            // 通过检测直接子表的 partstrat 判断是否有子分区
+            $sql = "SELECT
+                        c.relname AS TABLE_NAME,
+                        'RANGE' AS PARTITION_METHOD,
+                        CASE WHEN EXISTS (
+                            SELECT 1 FROM pg_inherits i_sub
+                            JOIN pg_partitioned_table pt_sub
+                              ON pt_sub.partrelid = i_sub.inhrelid
+                            WHERE i_sub.inhparent = c.oid
+                              AND pt_sub.partstrat = 'h'
+                        ) THEN 'HASH' ELSE NULL END AS SUBPARTITION_METHOD,
+                        COUNT(DISTINCT p.inhrelid) AS total_par,
+                        COUNT(DISTINCT l.inhrelid) AS total_sub
+                    FROM pg_class c
+                    JOIN pg_partitioned_table pt ON pt.partrelid = c.oid
+                    LEFT JOIN pg_inherits i ON i.inhparent = c.oid
+                    LEFT JOIN pg_class p ON p.oid = i.inhrelid
+                      AND p.relispartition = true
+                    LEFT JOIN pg_inherits i2 ON i2.inhparent = p.oid
+                    LEFT JOIN pg_class l ON l.oid = i2.inhrelid
+                    WHERE c.relname LIKE '"
+                        . str_replace("'", "''", $prefixEscaped) . "%'
+                      AND c.relispartition = false
+                      AND pt.partstrat = 'r'
+                    GROUP BY c.relname, pt.partstrat";
+        } else {
+            // MySQL 原有实现（保持不变）
+            $sql = "SELECT TABLE_NAME, PARTITION_METHOD, SUBPARTITION_METHOD,
+                           COUNT(DISTINCT PARTITION_NAME) AS total_par,
+                           SUM(CASE WHEN SUBPARTITION_NAME IS NOT NULL
+                               THEN 1 ELSE 0 END) AS total_sub
+                    FROM information_schema.PARTITIONS
+                    WHERE TABLE_SCHEMA = DATABASE()
+                      AND TABLE_NAME LIKE '" . str_replace("'", "''", $prefixEscaped) . "%'
+                      AND PARTITION_METHOD IS NOT NULL
+                      AND PARTITION_METHOD IN ('RANGE', 'RANGE COLUMNS')
+                    GROUP BY TABLE_NAME, PARTITION_METHOD, SUBPARTITION_METHOD";
+        }
+
+        $stmt = $pdo->query($sql);
+        $rows = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+
+        $count = 0;
+        $all = $this->loadAll();
+
+        // PDO 强制列名小写（PDO::CASE_LOWER），所有键名必须用小写
+        $colTable = 'table_name';
+        $colSubMethod = 'subpartition_method';
+        $colTotalPar = 'total_par';
+        $colTotalSub = 'total_sub';
+
+        foreach ($rows as $row) {
+            $tableName = isset($row[$colTable]) ? $row[$colTable] : null;
+            if ($tableName === null) {
+                continue;
+            }
+
+            // 去掉前缀得到纯表名
+            if ($prefix !== '' && strncmp($tableName, $prefix, strlen($prefix)) === 0) {
+                $tableName = substr($tableName, strlen($prefix));
+            }
+
+            // 跳过已注册的表
+            if (isset($all[$tableName])) {
+                continue;
+            }
+
+            // 最佳推测：绝大多数 RANGE 分区表以 created_at 为分区列
+            // 少数表使用 reply_created_at / thread_created_at，无法从 information_schema 可靠推断
+            $partitionColumn = 'created_at';
+
+            // 检测子分区（MySQL 5.7 兼容）
+            $subPartitionColumn = null;
+            $subPartitions = 0;
+            if (!empty($row[$colSubMethod])) {
+                $totalPar = (int)$row[$colTotalPar];
+                $totalSub = (int)$row[$colTotalSub];
+                if ($totalPar > 0 && $totalSub > 0) {
+                    // subpartition_count = total_sub / total_par（每个父分区下的子分区数）
+                    $subPartitions = (int)($totalSub / $totalPar);
+                    // 子分区列名无法从 information_schema 推断（可能是 thread_id / user_id），
+                    // 标记为 null 避免误导；DDL 构建不使用此字段，仅用于 getStatus() 展示
+                    $subPartitionColumn = null;
+                }
+            }
+
+            $config = new PartitionConfig(
+                $tableName,
+                $partitionColumn,
+                'quarter',
+                4,
+                8,
+                $subPartitionColumn,
+                $subPartitions
+            );
+
+            $all[$tableName] = $config;
+            $count++;
+        }
+
+        if ($count > 0) {
+            $this->saveAll($all);
+        }
+
+        return $count;
+    }
+
+    /**
+     * 从缓存加载全部配置。
+     *
+     * @return array<string, PartitionConfig>
+     */
+    private function loadAll(): array
+    {
+        $data = $this->cache->get(self::CACHE_KEY);
+        if (!is_array($data)) {
+            return array();
+        }
+        // 缓存驱动可能以数组形式返回（JSON 序列化），需要恢复为 PartitionConfig 对象
+        foreach ($data as $table => $config) {
+            if (is_array($config)) {
+                $data[$table] = new PartitionConfig(
+                    isset($config['table']) ? $config['table'] : $table,
+                    isset($config['partitionColumn']) ? $config['partitionColumn'] : 'created_at',
+                    isset($config['period']) ? $config['period'] : 'quarter',
+                    isset($config['advanceCount']) ? (int)$config['advanceCount'] : 4,
+                    isset($config['retention']) ? (int)$config['retention'] : 8,
+                    isset($config['subPartitionColumn']) ? $config['subPartitionColumn'] : null,
+                    isset($config['subPartitions']) ? (int)$config['subPartitions'] : 0
+                );
+            }
+        }
+        return $data;
+    }
+
+    /**
+     * 将全部配置持久化到缓存。
+     *
+     * @param array<string, PartitionConfig> $configs
+     * @return void
+     */
+    private function saveAll(array $configs)
+    {
+        // TTL 设为 0 表示永不过期（依赖缓存驱动的 LRU 淘汰策略）
+        $this->cache->set(self::CACHE_KEY, $configs, 0);
+    }
+}

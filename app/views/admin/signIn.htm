@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="<?php echo $view->e('locale_language');?>" class="dark">
+
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no" />
+        <meta name="referrer" content="origin-when-cross-origin">
+        <title><?php echo $view->website->header->e('title');?></title>
+        <?php $viewPath = $view->get('website.current.view'); ?>
+        <link rel="icon" href="<?php echo $viewPath;?>img/favicon.ico">
+        <link rel="stylesheet" href="<?php echo $viewPath;?>css/tailwind.min.css">
+        <style>
+            body {
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            }
+
+            .glass-card {
+                background: rgba(255, 255, 255, 0.03);
+                backdrop-filter: blur(20px);
+                border: 1px solid rgba(255, 255, 255, 0.05);
+                box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            }
+
+            .animated-bg {
+                background: radial-gradient(circle at 50% 50%, #1e1b4b 0%, #0f172a 100%);
+                overflow: hidden;
+            }
+
+            .orbit {
+                position: absolute;
+                border-radius: 50%;
+                border: 1px solid rgba(255, 255, 255, 0.05);
+                animation: spin linear infinite;
+            }
+
+            @keyframes spin {
+                from {
+                    transform: rotate(0deg);
+                }
+
+                to {
+                    transform: rotate(360deg);
+                }
+            }
+        </style>
+    </head>
+
+    <body class="animated-bg min-h-screen flex items-center justify-center relative p-4">
+        <!-- Background Decorations -->
+        <div class="orbit w-[1000px] h-[1000px]" style="animation-duration: 100s;"></div>
+        <div class="orbit w-[700px] h-[700px]" style="animation-duration: 60s; animation-direction: reverse;"></div>
+        <div class="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-600/10 blur-[120px] rounded-full"></div>
+        <div class="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-indigo-600/10 blur-[120px] rounded-full">
+        </div>
+
+        <main class="w-full max-w-[440px] z-10 animate-in fade-in zoom-in duration-700">
+            <div class="glass-card rounded-[40px] p-8 sm:p-12 relative overflow-hidden group">
+                <div
+                    class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-blue-500 to-transparent opacity-50">
+                </div>
+
+                <div class="text-center mb-10">
+                    <div
+                        class="inline-flex items-center justify-center w-20 h-20 rounded-3xl bg-gradient-to-tr from-blue-600 to-indigo-600 shadow-2xl shadow-blue-500/20 mb-6 group-hover:scale-110 transition-transform duration-500">
+                        <svg class="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+                                d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                        </svg>
+                    </div>
+                    <h1 class="text-3xl font-black text-white tracking-tight mb-2">
+                        <?php echo $view->get('language.title');?>
+                    </h1>
+                    <p class="text-slate-400 text-sm font-medium tracking-wide">Secure Administrative Access</p>
+                </div>
+
+                <!--{hook src_admin_view_signIn_start.htm}-->
+                <form class="ajax-form space-y-6" action="<?php echo $view->get('action');?>" method="post" id="form">
+                    <input type="hidden" name="_csrf_token" id="csrf_token"
+                        value="<?php echo $view->get('csrf_token');?>">
+                    <input type="hidden" name="mode" id="mode" value="<?php echo $view->get('mode');?>">
+
+                    <?php if ('password' === $view->get('mode')){ ?>
+                    <div class="space-y-2">
+                        <label for="password"
+                            class="block text-xs font-black text-slate-500 uppercase tracking-widest ml-1">
+                            <?php echo $view->get('language.password');?>
+                        </label>
+                        <div class="relative group/input">
+                            <input type="password" name="password" id="password" required
+                                class="w-full pl-12 pr-4 py-4 rounded-2xl bg-white/5 border border-white/10 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white/10 transition-all font-bold placeholder-white/20"
+                                placeholder="••••••••">
+                            <div
+                                class="absolute left-4 top-4 text-slate-500 group-focus-within/input:text-blue-400 transition-colors">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24 text-current">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+                                        d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                                </svg>
+                            </div>
+                        </div>
+                    </div>
+                    <?php } ?>
+
+                    <div class="pt-2">
+                        <button type="submit"
+                            class="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white font-black uppercase tracking-widest text-xs rounded-2xl shadow-2xl shadow-blue-600/30 transition-all transform hover:-translate-y-1 active:scale-95 flex items-center justify-center gap-3">
+                            <span>Verify Identity</span>
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3"
+                                    d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                            </svg>
+                        </button>
+                    </div>
+                </form>
+                <!--{hook src_admin_view_signIn_end.htm}-->
+                <div
+                    class="mt-10 flex items-center justify-center gap-6 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
+                    <a href="/"
+                        class="hover:text-blue-400 transition-colors"><?php echo $view->get('language.home_page');?></a>
+                    <div class="w-1 h-1 rounded-full bg-slate-700"></div>
+                    <a href="<?php echo $view->get('my_home_link'); ?>"
+                        class="hover:text-blue-400 transition-colors"><?php echo $view->get('language.my_home');?></a>
+                </div>
+            </div>
+
+            <p class="text-center mt-8 text-slate-600 text-[10px] uppercase font-black tracking-[0.3em]">
+                Powered by WellCMS 3.0 &bull; Core Engine
+            </p>
+        </main>
+
+        <?php $staticVersion = $view->get('website.static_version'); ?>
+        <script src="<?php echo $viewPath;?>js/main.js<?php echo $staticVersion; ?>"></script>
+        <script>
+            document.addEventListener('DOMContentLoaded', () => {
+                const inp = document.getElementById('password');
+                if (inp) inp.focus();
+            });
+
+            new GlobalFormHandler(".ajax-form", {
+                timeout: 1.5,
+                modalSize: "md",
+                onSuccess: (res) => {
+                    wellcms.toast(res.message, "success");
+                }
+            });
+
+            setTimeout(() => window.location.reload(), 1800000);
+        </script>
+    </body>
+
+</html>

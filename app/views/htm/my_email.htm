@@ -1,0 +1,183 @@
+<?php use App\Core\Compile;?>
+<?php include Compile::include(APP_PATH.'app/views/htm/my.header.inc.htm');?>
+<main class="flex-1 space-y-6">
+    <!-- Integrated Panel: Tabs + Content -->
+    <div class="glass-panel rounded-2xl overflow-hidden">
+        <!-- Sub Navigation Tabs (Integrated Header) -->
+        <div class="border-b border-gray-100 dark:border-gray-700/50">
+            <nav class="flex overflow-x-auto no-scrollbar scroll-smooth flex-nowrap">
+                <?php foreach ($view->get('menu.profiles.children', []) as $key => $item) { ?>
+                <a href="<?php echo $item['url']; ?>"
+                    class="<?php if ($item['child'] == $view->get('menu_fixed.child')){echo 'border-blue-500 text-blue-600 dark:text-blue-400';}else{echo 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300';}?> whitespace-nowrap px-6 py-3 border-b-2 font-medium text-base transition-colors"><?php echo $item['name']; ?></a>
+                <?php } ?>
+            </nav>
+        </div>
+
+        <!-- Content Area -->
+        <div class="p-8">
+            <div class="max-w-md mx-auto">
+                <form id="form" <?php if ($email = $view->get('email')) {echo 'class="ajax-form"';} ?>
+                    data-loading-text="Processing..." action="<?php echo $view->get('action');?>" method="post"
+                    class="space-y-6">
+                    <input type="hidden" name="_csrf_token" id="_csrf_token"
+                        value="<?php echo $view->get('csrf_token');?>">
+
+                    <?php if ($email) { ?>
+                    <!-- Step 2: Set New Email -->
+                    <input type="hidden" name="originalEmail" id="originalEmail"
+                        value="<?php echo $view->get('originalEmail');?>">
+                    <input type="hidden" name="key" id="key" value="modifyEmail">
+                    <div class="space-y-4">
+                        <div class="space-y-1">
+                            <label
+                                class="block text-sm font-medium text-gray-700 dark:text-gray-300"><?php echo $view->get('language.new_email');?></label>
+                            <input type="email" name="email" id="email" required
+                                class="w-full px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white/50 dark:bg-slate-800/50 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium"
+                                placeholder="name@example.com">
+                        </div>
+                        <div class="space-y-1">
+                            <label
+                                class="block text-sm font-medium text-gray-700 dark:text-gray-300"><?php echo $view->get('language.verification_code');?></label>
+                            <div class="relative">
+                                <input type="text" name="code" id="code" required
+                                    class="w-full px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white/50 dark:bg-slate-800/50 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium"
+                                    placeholder="Enter code">
+                                <div class="absolute right-2 top-1/2 -translate-y-1/2 flex items-center">
+                                    <a id="send-code" href="javascript:void(0);"
+                                        data-href="<?php echo $view->get('verify_code_link'); ?>"
+                                        class="text-xs font-bold text-blue-600 hover:text-blue-700 px-3 py-1 bg-blue-50 dark:bg-blue-900/30 rounded-lg transition-colors">
+                                        <?php echo $view->get('language.send_verification_code');?>
+                                    </a>
+                                    <span id="sending-completed" class="text-xs font-bold text-green-600 px-3 py-1"
+                                        style="display: none;">
+                                        <?php echo $view->get('language.send_success');?>
+                                    </span>
+                                    <span id="countdown" class="text-xs font-mono text-gray-400 px-3 py-1"
+                                        style="display: none;">60</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <?php } else { ?>
+                    <!-- Step 1: Verify Original Email -->
+                    <input type="hidden" name="key" id="key" value="originalEmail">
+                    <div class="space-y-4">
+                        <div class="space-y-1">
+                            <label
+                                class="block text-sm font-medium text-gray-700 dark:text-gray-300"><?php echo $view->get('language.original_email');?></label>
+                            <input type="email" name="email" id="email" required
+                                class="w-full px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white/50 dark:bg-slate-800/50 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium"
+                                placeholder="your-current@email.com">
+                        </div>
+                        <div class="space-y-1">
+                            <label
+                                class="block text-sm font-medium text-gray-700 dark:text-gray-300"><?php echo $view->get('language.verification_code');?></label>
+                            <div class="relative">
+                                <input type="text" name="code" id="code" required
+                                    class="w-full px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white/50 dark:bg-slate-800/50 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium"
+                                    placeholder="Enter code">
+                                <div class="absolute right-2 top-1/2 -translate-y-1/2 flex items-center">
+                                    <a id="send-code" href="javascript:void(0);"
+                                        data-href="<?php echo $view->get('verify_code_link'); ?>"
+                                        class="text-xs font-bold text-blue-600 hover:text-blue-700 px-3 py-1 bg-blue-50 dark:bg-blue-900/30 rounded-lg transition-colors">
+                                        <?php echo $view->get('language.send_verification_code');?>
+                                    </a>
+                                    <span id="sending-completed" class="text-xs font-bold text-green-600 px-3 py-1"
+                                        style="display: none;">
+                                        <?php echo $view->get('language.send_success');?>
+                                    </span>
+                                    <span id="countdown" class="text-xs font-mono text-gray-400 px-3 py-1"
+                                        style="display: none;">60</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <?php } ?>
+
+                    <div class="flex justify-center pt-2">
+                        <button type="submit" id="from-next"
+                            class="w-full py-3 bg-blue-600 text-white font-bold rounded-xl shadow-lg shadow-blue-500/20 hover:bg-blue-700 hover:scale-[1.01] active:scale-[0.99] transition-all">
+                            <?php echo $view->get('language.submit');?>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</main>
+<?php include Compile::include(APP_PATH . 'app/views/htm/my.footer.inc.htm');?>
+
+<script ajax-eval="true">
+    bindClickID("from-next", function (e) {
+        const form = document.getElementById('form');
+        if (form.classList.contains('ajax-form')) return;
+
+        e.preventDefault();
+        const emailInput = document.querySelector('input[name="email"]');
+        const email = emailInput ? emailInput.value : null;
+        if (!email) {
+            wellcms.showInputError('email', 'Email is required');
+            return;
+        }
+
+        const codeInput = document.querySelector('input[name="code"]');
+        const code = codeInput ? codeInput.value : null;
+        if (!code) {
+            wellcms.showInputError('code', 'Code is required');
+            return;
+        }
+
+        const url = form.action;
+        const separator = url.indexOf('?') === -1 ? '?' : '&';
+        window.location.href = url + separator + 'email=' + encodeURIComponent(email) + '&code=' + encodeURIComponent(code);
+    });
+
+    bindClickID("send-code", function () {
+        const btn = document.getElementById("send-code");
+        const url = btn.getAttribute("data-href");
+        if (!url) return;
+
+        const email = document.querySelector('input[name="email"]')?.value;
+        const csrf = document.querySelector('input[name="_csrf_token"]')?.value;
+        const key = document.getElementById('key')?.value || 'originalEmail';
+
+        if (!email) {
+            wellcms.showInputError('email', 'Please enter your email first');
+            return;
+        }
+
+        const data = { email, _csrf_token: csrf, key };
+
+        postRequest(url, data, function (response) {
+            if (response.code === 0) {
+                const completed = document.getElementById("sending-completed");
+                const countdownEl = document.getElementById('countdown');
+
+                btn.style.display = 'none';
+                completed.style.display = 'inline-block';
+
+                let timer = 300;
+                countdownEl.textContent = timer;
+                countdownEl.style.display = 'inline-block';
+
+                const interval = setInterval(() => {
+                    timer--;
+                    countdownEl.textContent = timer;
+                    if (timer <= 0) {
+                        clearInterval(interval);
+                        btn.style.display = 'inline-block';
+                        completed.style.display = 'none';
+                        countdownEl.style.display = 'none';
+                    }
+                }, 1000);
+            } else {
+                wellcms.error(response.message);
+            }
+        });
+    });
+
+    /* 30分钟token失效，刷新页面 */
+    setTimeout(() => {
+        window.location.reload();
+    }, 1800000);
+</script>

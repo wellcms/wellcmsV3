@@ -1,0 +1,128 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+/**
+ * WellCMS 3.0 Scheduler 健康检查与监控脚本
+ *
+ * 功能：
+ * 1. 检查 Redis 队列积压情况 (L3)
+ * 2. 检查最近扫描日志中的错误模式 (L2)
+ * 3. 检查调度器进程活跃度 (L1)
+ *
+ * 用法：
+ * php bin/scheduler-health-check [--webhook=URL] [--threshold=1000]
+ */
+
+define('IN_WELLCMS', true);
+define('APP_PATH', dirname(__DIR__) . DIRECTORY_SEPARATOR);
+define('DEBUG', 0);
+define('SCHEDULER_MODE', true);
+
+require APP_PATH . 'app/Core/Compile.php';
+require APP_PATH . 'app/Core/Autoload.php';
+
+// 获取命令行参数
+$options = getopt("", ["webhook:", "threshold:", "daemon", "interval:"]);
+$webhookUrl = $options['webhook'] ?? ''; // 可选：通知地址
+$threshold = (int)($options['threshold'] ?? 1000); // 积压阈值
+$isDaemon = isset($options['daemon']); // 是否以守护进程模式运行
+$interval = (int)($options['interval'] ?? 60); // 间隔秒数
+
+// 循环执行逻辑 (支持 Daemon 模式)
+do {
+    executeHealthCheck($webhookUrl, $threshold);
+
+    if (!$isDaemon) break;
+
+    sleep($interval);
+} while (true);
+
+function executeHealthCheck(string $webhookUrl, int $threshold)
+{
+    try {
+        $cache = \App\Bootstrap::init()->get(\Framework\Cache\Interfaces\CacheInterface::class);
+        $alerts = [];
+
+        // --- L1: 进程存活检查 (简单检查，建议配合 Supervisor) ---
+        // 这里我们可以检查 Redis 里的存活心跳（如果未来实现了心跳逻辑）
+        // 目前通过检查是否能连接上 Redis 作为基础逻辑存活性判定
+        if (!$cache->ping()) {
+            $alerts[] = "CRITICAL: Cannot connect to Redis.";
+        }
+
+        // --- L3: 队列积压检查 ---
+        $queueKey = 'scheduler:queue:zset';
+        $pendingCount = $cache->zCard($queueKey);
+        if ($pendingCount > $threshold) {
+            $alerts[] = "WARNING: Scheduler queue backlogged! Pending tasks: {$pendingCount} (Threshold: {$threshold})";
+        }
+
+        // --- L2: 日志异常扫描 (仅扫描最近 5 分钟，纯 PHP 实现兼容所有平台) ---
+        $logFile = APP_PATH . 'storage/logs/' . date('Ym') . '/scheduler.log';
+        if (file_exists($logFile)) {
+            $lines = file($logFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+            $fiveMinsAgoTs = time() - 300;
+            $errors = [];
+            $count = 0;
+            if ($lines !== false) {
+                foreach (array_reverse($lines) as $line) {
+                    // 解析时间戳判断是否超出 5 分钟
+                    if (preg_match('/^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]/', $line, $m)) {
+                        $lineTs = strtotime($m[1]);
+                        if ($lineTs !== false && $lineTs < $fiveMinsAgoTs) {
+                            break;
+                        }
+                    }
+                    // 匹配异常关键字（精确匹配，避免 normal task failure 误报）
+                    if (preg_match('/\b(CRITICAL|FATAL|Loop exception|Memory limit hit)\b/i', $line)) {
+                        $errors[] = $line;
+                        $count++;
+                        if ($count >= 5) {
+                            break;
+                        }
+                    }
+                }
+            }
+            if (!empty($errors)) {
+                $alerts[] = "LOG ERROR DETECTED:\n" . implode("\n", array_reverse($errors));
+            }
+        }
+
+        // --- 汇总报告 ---
+        if (!empty($alerts)) {
+            $message = "🚨 [WellCMS Scheduler Alert]\n" . implode("\n", $alerts);
+            echo $message . "\n";
+
+            // 如果提供了 Webhook，发送通知
+            if ($webhookUrl) {
+                triggerWebhook($webhookUrl, $message);
+            }
+        } else {
+            echo "✅ Scheduler is healthy. Pending: {$pendingCount}\n";
+        }
+    } catch (\Throwable $e) {
+        echo "❌ Health check failed: " . $e->getMessage() . "\n";
+    }
+}
+
+/**
+ * 触发外部 Webhook (示例)
+ */
+function triggerWebhook(string $url, string $content)
+{
+    $data = json_encode(['msgtype' => 'text', 'text' => ['content' => $content]]);
+    $ch = curl_init($url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
+    $response = curl_exec($ch);
+    if ($response === false) {
+        fwrite(STDERR, "Webhook curl error: " . curl_error($ch) . PHP_EOL);
+    }
+    curl_close($ch);
+}

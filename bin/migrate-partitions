@@ -1,0 +1,173 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+/**
+ * WellCMS 存量分区表迁移脚本。
+ *
+ * ┌──────────────────────────────────────────────────────────────────┐
+ * │ 何时使用                                                         │
+ * │                                                                  │
+ * │ 首次部署 PartitionManager 时，手动接管存量分区表。                  │
+ * │ 现已基本不需要 —— maintain() 内部已自带自动发现。                   │
+ * │ 本脚本仅保留用于以下场景：                                         │
+ * │   1. 你想先扫描看看有哪些表，再决定是否执行                          │
+ * │   2. --discover-only 只注册不维护                                  │
+ * │                                                                  │
+ * │ 日常维护请用:  php bin/partition                                  │
+ * │ 审计模式请用:   php bin/migrate-partitions-prod --audit           │
+ * └──────────────────────────────────────────────────────────────────┘
+ *
+ * 执行步骤：
+ *   1. discoverExisting('well_') — 扫描存量 RANGE 分区表并注册
+ *   2. maintain() — 创建未来分区 + 清理过期分区
+ *
+ * 用法：
+ *   php bin/migrate-partitions                    # 全流程：发现 + 维护
+ *   php bin/migrate-partitions --dry-run          # 预览模式
+ *   php bin/migrate-partitions --discover-only    # 仅注册，不维护
+ *
+ * 安全：
+ *   - pid 文件锁防重入
+ *   - 内部 Redis 分布式锁防并发
+ *   - createFreshConnection() 专用连接执行 DDL
+ *
+ * PHP 7.2 兼容。
+ */
+
+// ========== 防重入：pid 文件锁 ==========
+$lockFile = sys_get_temp_dir() . '/partition_migrate.lock';
+$lockFp = fopen($lockFile, 'c');
+if (!$lockFp || !flock($lockFp, LOCK_EX | LOCK_NB)) {
+    fwrite(STDERR, "ERROR: Another migration process is already running.\n");
+    exit(1);
+}
+
+// ========== 环境初始化 ==========
+define('IN_WELLCMS', true);
+define('APP_PATH', str_replace('\\', DIRECTORY_SEPARATOR, dirname(__DIR__)) . DIRECTORY_SEPARATOR);
+define('DEBUG', 1);
+
+if (DEBUG) {
+    error_reporting(E_ALL);
+    ini_set('display_errors', '1');
+} else {
+    error_reporting(E_ALL & ~E_NOTICE & ~E_DEPRECATED);
+    ini_set('display_errors', '0');
+}
+
+require APP_PATH . 'app/Core/Compile.php';
+require APP_PATH . 'app/Core/Autoload.php';
+
+// ========== 解析参数 ==========
+$opts = getopt('', array('dry-run', 'discover-only'));
+$dryRun = isset($opts['dry-run']);
+$discoverOnly = isset($opts['discover-only']);
+
+// ========== 初始化容器 ==========
+try {
+    $container = \App\Bootstrap::init();
+} catch (\Throwable $e) {
+    fwrite(STDERR, "ERROR: Bootstrap failed: " . $e->getMessage() . "\n");
+    exit(1);
+}
+
+$pm = $container->get(\Framework\Database\Partition\PartitionManager::class);
+$logger = $container->get(\Framework\Logger\LoggerInterface::class);
+
+$exitCode = 0;
+
+echo "============================================================\n";
+echo " WellCMS 分区表迁移脚本\n";
+echo "============================================================\n";
+echo " Dry-run : " . ($dryRun ? 'YES' : 'NO') . "\n";
+echo " Mode    : " . ($discoverOnly ? 'discover only' : 'discover + maintain') . "\n";
+echo "------------------------------------------------------------\n";
+
+// ========== Step 1: 发现存量分区表 ==========
+echo "\n[Step 1/2] 扫描存量分区表...\n";
+
+try {
+    $count = $pm->adoptExistingTables();
+    echo "  发现并注册 {$count} 张存量分区表\n";
+    $logger->info('Partition migration: discoverExisting completed', array(
+        'count'   => $count,
+        'dry_run' => $dryRun,
+    ));
+} catch (\Throwable $e) {
+    echo "  ✗ 发现失败: " . $e->getMessage() . "\n";
+    $logger->error('Partition migration: discoverExisting failed', array(
+        'error' => $e->getMessage(),
+    ));
+    $exitCode = 1;
+}
+
+// ========== Step 2: 维护（创建未来分区） ==========
+if (!$discoverOnly) {
+    echo "\n[Step 2/2] 执行分区维护...\n";
+
+    // 显示已注册的表
+    $status = $pm->getStatus();
+    if (!empty($status)) {
+        echo "  已接管以下表:\n";
+        foreach ($status as $table => $config) {
+            $subInfo = $config['sub_partitions'] > 0
+                ? sprintf(' +%d sub by %s', $config['sub_partitions'], $config['sub_partition'])
+                : '';
+            echo "    - {$table} ({$config['period']}, adv={$config['advance_count']}, ret={$config['retention']}{$subInfo})\n";
+        }
+    }
+
+    try {
+        $result = $pm->maintain($dryRun);
+
+        echo sprintf(
+            "  扫描: %d 表, 创建: %d 分区, 删除: %d 分区, 错误: %d (%.0f ms)\n",
+            $result->tablesScanned,
+            $result->partitionsCreated,
+            $result->partitionsDropped,
+            $result->errors,
+            $result->executionMs
+        );
+
+        if ($result->errors > 0) {
+            echo "  错误详情:\n";
+            foreach ($result->errorDetails as $err) {
+                echo "    - [{$err['table']}] {$err['error']}\n";
+            }
+        }
+
+        $logger->info('Partition migration: maintain completed', array(
+            'tables_scanned'     => $result->tablesScanned,
+            'partitions_created' => $result->partitionsCreated,
+            'partitions_dropped' => $result->partitionsDropped,
+            'errors'             => $result->errors,
+            'execution_ms'       => round($result->executionMs, 2),
+            'dry_run'            => $dryRun,
+        ));
+
+        if ($result->errors > 0) {
+            $exitCode = 1;
+        }
+    } catch (\Throwable $e) {
+        echo "  ✗ 维护失败: " . $e->getMessage() . "\n";
+        $logger->error('Partition migration: maintain failed', array(
+            'error' => $e->getMessage(),
+        ));
+        $exitCode = 1;
+    }
+} else {
+    echo "\n[Step 2/2] 跳过（--discover-only）\n";
+    echo "  已注册 " . count($pm->getStatus()) . " 张表。运行 php bin/migrate-partitions 执行维护。\n";
+}
+
+echo "\n------------------------------------------------------------\n";
+echo " 迁移 " . ($exitCode === 0 ? '完成' : '完成（有错误）') . "\n";
+echo "============================================================\n";
+
+// ========== 释放锁 ==========
+flock($lockFp, LOCK_UN);
+fclose($lockFp);
+
+exit($exitCode);

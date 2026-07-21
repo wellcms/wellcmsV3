@@ -1,0 +1,302 @@
+<?php use App\Core\Compile;?>
+<?php include Compile::include(APP_PATH.'app/views/admin/header.inc.htm');?>
+<?php $itemList = $view->get('item_list'); ?>
+
+<div class="space-y-8 mb-12">
+	<!-- Top Bar -->
+	<div class="flex flex-col lg:flex-row justify-between items-center gap-6">
+		<div>
+			<h1 class="text-2xl font-black text-gray-900 dark:text-white uppercase tracking-tight">
+				<?php echo $view->get('language.store');?>
+			</h1>
+			<p class="text-xs font-bold text-gray-400 uppercase tracking-widest mt-1">
+				<?php echo $view->get('language.official_market_content');?>
+			</p>
+		</div>
+
+		<?php if (true === $view->get('signin', false)) { ?>
+		<div class="flex flex-wrap items-center justify-center lg:justify-end gap-4 w-full lg:w-auto">
+			<!-- Search Bar -->
+			<div
+				class="flex items-center gap-2 bg-white dark:bg-white/5 p-1.5 rounded-2xl shadow-sm border border-gray-100 dark:border-white/5 w-full max-w-md">
+				<select name="searchType" id="searchType"
+					class="bg-transparent border-none text-xs font-bold text-gray-500 focus:ring-0 outline-none px-3 appearance-none cursor-pointer">
+					<?php if ($searchTypes = $view->get('search_types')) { foreach($searchTypes as $item) { ?>
+					<option value="<?php echo $item['field']; ?>"
+						<?php echo (string)$item['field'] === (string)$view->get('search.searchType') ? 'selected' : ''; ?>>
+						<?php echo $item['label']; ?>
+					</option>
+					<?php }} ?>
+				</select>
+				<div class="w-px h-4 bg-gray-200 dark:bg-white/10"></div>
+				<input type="text" id="searchInput"
+					class="flex-1 bg-transparent border-none text-xs font-bold focus:ring-0 outline-none px-2"
+					placeholder="<?php echo $view->get('language.enter_keywords'); ?>"
+					value="<?php echo $view->e('search.keywords'); ?>">
+				<button id="store-search-btn"
+					data-rewrite="<?php echo $view->get('config.rewrite'); ?>"
+					data-path="<?php echo $view->get('config.path'); ?>"
+					class="p-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-all shadow-lg shadow-blue-500/20">
+					<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+							d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+					</svg>
+				</button>
+			</div>
+
+			<!-- Quick Filters / Sync -->
+			<a class="ajax group flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-lg shadow-indigo-500/20 transition-all"
+				data-method="post" href="<?php echo $view->get('sync.url');?>">
+				<svg class="w-4 h-4 group-hover:rotate-180 transition-transform duration-500" fill="none"
+					stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+						d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+				</svg>
+				<span
+					class="text-[10px] font-black uppercase tracking-widest"><?php echo $view->get('sync.label');?></span>
+			</a>
+
+			<!-- Sign Out -->
+			<a class="ajax-post group flex items-center gap-2 px-4 py-2.5 bg-gray-500 hover:bg-gray-600 text-white rounded-xl shadow-lg shadow-gray-500/20 transition-all"
+				data-arg='{"_csrf_token":"<?php echo $view->get('csrf_token');?>"}' href="<?php echo $view->get('signout_action');?>">
+				<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+						d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+				</svg>
+				<span
+					class="text-[10px] font-black uppercase tracking-widest"><?php echo $view->get('language.logout');?></span>
+			</a>
+		</div>
+		<?php } ?>
+	</div>
+
+	<?php if (true === $view->get('signin', false)) { ?>
+	<!-- Grid Layout -->
+	<?php if (!empty($itemList)) { ?>
+	<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5 gap-6">
+		<?php foreach($itemList as $key => $item) { ?>
+		<div
+			class="glass-panel group rounded-3xl p-6 hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 border border-transparent hover:border-blue-500/30">
+			<div class="flex gap-5">
+				<!-- Icon -->
+				<div
+					class="w-20 h-20 rounded-2xl bg-gradient-to-tr from-gray-50 to-white dark:from-white/5 dark:to-white/10 p-3 shadow-inner flex items-center justify-center flex-shrink-0">
+					<a href="<?php echo $item['operation_links']['detail']['url'] ?? '#';?>" class="w-full h-full block">
+						<img src="<?php echo empty($item['icon_url']) ? '' : $item['icon_url'];?>"
+							alt="<?php echo $item['name'];?>"
+							class="w-full h-full object-contain rounded-xl grayscale group-hover:grayscale-0 transition-all duration-500">
+					</a>
+				</div>
+
+				<!-- Content -->
+				<div class="flex-1 min-w-0">
+					<div class="flex justify-between items-start mb-1">
+						<a href="<?php echo $item['operation_links']['detail']['url'] ?? '#';?>"
+							class="text-base font-black text-gray-900 dark:text-white truncate group-hover:text-blue-600 transition-colors uppercase">
+							<?php echo $item['name'];?>
+						</a>
+					</div>
+					<div class="flex items-center gap-2 mb-3">
+						<span
+							class="px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-600 text-[9px] font-black tracking-widest uppercase">
+							v<?php echo $item['version']; ?>
+						</span>
+						<?php if ($item['price'] > 0) { ?>
+						<span
+							class="px-1.5 py-0.5 rounded bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 text-[9px] font-black tracking-widest uppercase">
+							¥<?php echo $item['price']; ?>
+						</span>
+						<?php } else { ?>
+						<span
+							class="px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 text-[9px] font-black tracking-widest uppercase">
+							<?php echo $view->get('language.free');?>
+						</span>
+						<?php } ?>
+					</div>
+					<p class="text-xs text-gray-500 dark:text-gray-400 line-clamp-2 leading-relaxed mb-4 h-8">
+						<?php echo $item['brief'] ?? $view->get('language.no_description'); ?>
+					</p>
+
+					<!-- Action Buttons -->
+					<div class="flex flex-wrap gap-2">
+
+						<?php if (!empty($item['operation_links']['upgrade'])) { ?>
+						<a rel="nofollow" href="<?php echo $item['operation_links']['upgrade']['url'] ?? '#';?>"
+							class="ajax-get px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg transition-all text-[9px] font-black uppercase tracking-widest shadow-lg shadow-rose-500/20">
+							<?php echo $view->get('language.upgrade');?>
+						</a>
+						<?php } ?>
+
+						<?php if (!empty($item['operation_links']['download'])) {
+							$isBuyBtn = strpos($item['operation_links']['download']['url'] ?? '', 'payment') !== false;
+							$btnText = $isBuyBtn
+								? ($view->get('language.payment') ?: $view->get('language.download'))
+								: $view->get('language.download');
+							$modalTitle = $isBuyBtn ? $view->get('language.payment') : $view->get('language.download');
+							$modalSize  = $isBuyBtn ? 'data-modal-size="md"' : '';
+							if ($isBuyBtn) {
+						?>
+						<a rel="nofollow" href="<?php echo $item['operation_links']['download']['url'] ?? '#';?>"
+							class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-all text-[9px] font-black uppercase tracking-widest shadow-lg shadow-indigo-500/20"
+							data-modal-title="<?php echo htmlspecialchars($modalTitle, ENT_QUOTES, 'UTF-8');?>"
+							<?php echo $modalSize;?>>
+							<?php echo $btnText;?>
+						</a>
+						<?php } else { ?>
+						<a rel="nofollow" href="<?php echo $item['operation_links']['download']['url'] ?? '#';?>"
+							class="ajax-get px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-all text-[9px] font-black uppercase tracking-widest shadow-lg shadow-indigo-500/20">
+							<?php echo $btnText;?>
+						</a>
+						<?php } ?>
+						<?php } ?>
+						<?php if (1 === (int)($item["installed"] ?? 0) && empty($item["operation_links"]["upgrade"])) { ?>
+							<span class="px-3 py-1.5 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded-lg text-[9px] font-black uppercase tracking-widest">
+								<?php echo $view->get("language.installed");?>
+							</span>
+						<?php } ?>
+					</div>
+
+				</div>
+			</div>
+
+			<!-- Footer Meta -->
+			<div
+				class="mt-6 pt-4 border-t border-gray-100 dark:border-white/5 flex items-center justify-between text-[9px] font-black text-gray-400 uppercase tracking-widest">
+				<div class="flex items-center gap-4">
+					<div class="flex items-center gap-1">
+						<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+						</svg>
+						<?php echo ($item['author'] ?? '') ?: $view->get('language.official');?>
+					</div>
+					<div class="flex items-center gap-1">
+						<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+						</svg>
+						<?php echo number_format((int)($item['downloads'] ?? 0));?>
+					</div>
+				</div>
+				<div>
+					<?php echo $item['last_update_fmt'] ?? ''; ?>
+				</div>
+			</div>
+		</div>
+		<?php } ?>
+	</div>
+
+	<!-- Pagination -->
+	<?php if ($view->get('pagination.previous_link') || $view->get('pagination.next_link')) { ?>
+	<div class="mt-12 flex justify-center gap-4">
+		<?php if ($view->get('pagination.previous_link')) { ?>
+		<a href="<?php echo $view->get('pagination.previous_link'); ?>"
+			class="px-8 py-3 bg-white dark:bg-white/5 hover:bg-gray-50 dark:hover:bg-white/10 text-gray-500 dark:text-gray-400 rounded-2xl shadow-sm border border-gray-100 dark:border-white/5 transition-all text-[10px] font-black uppercase tracking-widest">
+			<?php echo $view->get('language.previous'); ?>
+		</a>
+		<?php } ?>
+
+		<?php if ($view->get('pagination.next_link')) { ?>
+		<a href="<?php echo $view->get('pagination.next_link'); ?>"
+			class="px-8 py-3 bg-white dark:bg-white/5 hover:bg-gray-50 dark:hover:bg-white/10 text-gray-500 dark:text-gray-400 rounded-2xl shadow-sm border border-gray-100 dark:border-white/5 transition-all text-[10px] font-black uppercase tracking-widest">
+			<?php echo $view->get('language.next'); ?>
+		</a>
+		<?php } ?>
+	</div>
+	<?php } ?>
+
+	<?php } else { ?>
+	<!-- Empty State -->
+	<div class="glass-panel rounded-3xl p-20 text-center">
+		<div class="inline-flex p-6 bg-gray-100 dark:bg-white/5 text-gray-400 rounded-3xl mb-6">
+			<svg class="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+					d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+			</svg>
+		</div>
+		<h2 class="text-xl font-black text-gray-900 dark:text-white uppercase tracking-widest mb-2">
+			<?php echo $view->get('language.no_apps_found');?></h2>
+		<p class="text-xs font-bold text-gray-500"><?php echo $view->get('language.search_filter_tip');?>
+		</p>
+	</div>
+	<?php } ?>
+
+	<?php } else { ?>
+	<!-- Sign In Form -->
+	<div class="max-w-md mx-auto mt-20">
+		<div class="glass-panel rounded-3xl p-10 shadow-2xl text-center space-y-8">
+			<div
+				class="inline-flex p-5 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 rounded-3xl mb-2 shadow-inner">
+				<svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+						d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+				</svg>
+			</div>
+
+			<div class="space-y-2">
+				<h2 class="text-2xl font-black text-gray-900 dark:text-white uppercase tracking-widest">
+					<?php echo $view->get('language.store_signin_title', 'Connect Store');?>
+				</h2>
+				<p class="text-xs font-bold text-gray-400 max-w-sm mx-auto leading-relaxed">
+					<?php echo $view->get('language.store_signin_tip');?>
+				</p>
+			</div>
+
+			<form class="ajax-form space-y-4" action="<?php echo $view->get('action');?>" method="post" id="form">
+				<input type="hidden" name="_csrf_token" value="<?php echo $view->get('csrf_token');?>">
+
+				<div class="relative group">
+					<input type="text" name="username" required
+						class="w-full px-6 py-4 rounded-2xl bg-gray-50 dark:bg-white/5 border border-transparent focus:border-indigo-500 focus:bg-white dark:focus:bg-white/10 outline-none text-sm font-bold transition-all duration-300"
+						placeholder="<?php echo $view->get('language.email');?> / <?php echo $view->get('language.username');?>" />
+				</div>
+
+				<div class="relative group">
+					<input type="password" name="password" required
+						class="w-full px-6 py-4 rounded-2xl bg-gray-50 dark:bg-white/5 border border-transparent focus:border-indigo-500 focus:bg-white dark:focus:bg-white/10 outline-none text-sm font-bold transition-all duration-300"
+						placeholder="<?php echo $view->get('language.password');?>" />
+				</div>
+
+				<button type="submit"
+					class="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-black uppercase tracking-widest text-xs shadow-xl shadow-indigo-600/20 transition-all active:scale-[0.98]">
+					<?php echo $view->get('language.submit');?>
+				</button>
+			</form>
+
+			<div class="pt-6 border-t border-gray-100 dark:border-white/5">
+				<a href="https://www.wellcms.com/" target="_blank"
+					class="text-[10px] font-black text-indigo-500 hover:text-indigo-600 uppercase tracking-widest transition-colors">
+					<?php echo $view->get('language.official_website');?> &rarr;
+				</a>
+			</div>
+		</div>
+	</div>
+	<?php } ?>
+</div>
+
+<?php include Compile::include(APP_PATH . 'app/views/admin/footer.inc.htm');?>
+
+<script ajax-eval="true">
+	new GlobalFormHandler(".ajax-form", {
+		loadingText: "<?php echo $view->get('language.processing');?>",
+		modalSize: "md",
+		modalPosition: "center",
+		timeout: 2
+	});
+
+	function performSearch(rewrite, path) {
+		const searchType = document.getElementById("searchType").value;
+		const keywords = document.getElementById("searchInput").value.trim();
+
+		if (!keywords) {
+			showAlert("<?php echo $view->get('language.please_enter_keywords');?>");
+			return;
+		}
+
+		window.location = wellcms.url('admin/store/list', { search_type: searchType, keywords: urlEncode(keywords) }, { url_rewrite_on: rewrite, path: path });
+	}
+
+	setTimeout(() => {
+		window.location.reload();
+	}, 1800000);
+
+
+</script>

@@ -1,0 +1,262 @@
+<?php use App\Core\Compile;?>
+<?php include Compile::include(APP_PATH.'app/views/htm/header.inc.htm');?>
+
+<main class="flex-1 flex items-center justify-center px-6 py-12 relative z-10">
+    <!--{hook sign_in_start.htm}-->
+    <div class="glass-panel w-full max-w-md p-8 rounded-2xl shadow-2xl antigravity-float">
+        <div class="text-center">
+            <!--{hook sign_in_h2_before.htm}-->
+            <h1 class="text-3xl font-bold mb-2">
+                <?php echo $view->get('language.sign_in_to');?>
+            </h1>
+            <p class="text-gray-500 dark:text-gray-400">
+                <?php echo $view->get('language.sign_in_to_description', 'Sign in to continue to your account.');?></p>
+        </div>
+        <hr class="my-8">
+
+        <!--{hook sign_in_body_before.htm}-->
+        <div class="ajax-body">
+            <form class="ajax-form space-y-5" data-loading-text="Loading..." action="<?php echo $view->get('action');?>"
+                method="post" id="form">
+
+                <!--{hook sign_in_form_before.htm}-->
+                <!-- Email verification code signIn -->
+                <?php if ($view->get('signIn_by_code') && $view->get('verify_email_on')){ ?>
+                <div>
+                    <label class="block text-sm font-medium mb-1 ml-1 text-gray-600 dark:text-gray-300">
+                        <?php echo $view->get('language.email');?>
+                    </label>
+                    <div class="relative">
+                        <input type="text" name="email" id="email"
+                            class="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white/50 dark:bg-slate-800/50 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                            placeholder="you@example.com" required>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium mb-1 ml-1 text-gray-600 dark:text-gray-300">
+                        <?php echo $view->get('language.verification_code');?>
+                    </label>
+                    <div class="relative flex items-center">
+                        <input type="text" name="code" id="code"
+                            class="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white/50 dark:bg-slate-800/50 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                            placeholder="<?php echo $view->get('language.verification_code');?>" required>
+                        <div class="absolute right-3 flex items-center bg-transparent">
+                            <a id="send-code" href="javascript:void(0);"
+                                data-href="<?php echo $view->get('verify_code_link'); ?>"
+                                class="text-sm text-blue-600 font-medium hover:underline">
+                                <?php echo $view->get('language.send_verification_code');?>
+                            </a>
+                            <span id="sending-completed" class="text-sm text-blue-600 font-medium"
+                                style="display: none;">
+                                <?php echo $view->get('language.send_success');?>
+                            </span>
+                            <span id="countdown" class="text-sm text-gray-500 ml-2" style="display: none;">60</span>
+                        </div>
+                    </div>
+                </div>
+                <?php } ?>
+
+                <!--{hook sign_in_form_password_before.htm}-->
+                <!-- Password signIn -->
+                <?php if (empty($view->get('signIn_by_code'))){ ?>
+                <div>
+                    <label class="block text-sm font-medium mb-1 ml-1 text-gray-600 dark:text-gray-300">
+                        <?php echo $view->get('signIn_input');?>
+                    </label>
+                    <input type="text" name="username" id="username"
+                        class="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white/50 dark:bg-slate-800/50 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                        placeholder="<?php echo $view->get('signIn_input');?>" required>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium mb-1 ml-1 text-gray-600 dark:text-gray-300">
+                        <?php echo $view->get('language.password');?>
+                    </label>
+                    <input type="password" name="password" id="password"
+                        class="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white/50 dark:bg-slate-800/50 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                        placeholder="••••••••" required>
+                </div>
+                <?php } ?>
+
+                <!--{hook sign_in_form_password_after.htm}-->
+                <div class="flex items-center justify-between">
+                    <label class="inline-flex items-center cursor-pointer gap-2 group">
+                        <input type="checkbox" class="peer sr-only" id="remember-me" name="remember" value="1" />
+                        <input type="hidden" id="remember-me-hidden" name="remember" value="0" disabled />
+                        <span
+                            class="w-5 h-5 border-2 border-gray-300 dark:border-gray-600 rounded-md flex items-center justify-center transition-all group-hover:border-blue-500 peer-checked:border-blue-600 peer-checked:bg-blue-600 peer-checked:[&>svg]:block">
+                            <svg class="hidden w-3.5 h-3.5 text-white" fill="none" stroke="currentColor"
+                                stroke-width="3" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                            </svg>
+                        </span>
+                        <span
+                            class="text-sm text-gray-600 dark:text-gray-400 group-hover:text-gray-900 dark:group-hover:text-gray-200 transition-colors">
+                            <?php echo $view->get('language.remember_me');?>
+                        </span>
+                    </label>
+                    <a href="<?php echo $view->get('user.reset_password.url'); ?>"
+                        class="text-sm text-blue-600 hover:underline">
+                        <?php echo $view->get('language.forget_password');?>
+                    </a>
+                </div>
+                <!--{hook sign_in_form_remember_me_after.htm}-->
+
+                <div class="pt-2">
+                    <input type="hidden" name="_token" id="_token" value="<?php echo $view->get('user_token');?>">
+                    <button type="submit"
+                        class="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-lg shadow-blue-500/30 transition-all transform hover:-translate-y-0.5 mt-2">
+                        <?php echo $view->get('language.submit');?>
+                    </button>
+                </div>
+            </form>
+        </div>
+        <!--{hook sign_in_body_after.htm}-->
+        <!-- 第三方/社交登录 -->
+        <!-- <div class="flex flex-col gap-3">
+            <div class="flex items-center gap-2 text-gray-400 text-xs my-1">
+                <div class="flex-1 h-px bg-gray-200"></div>
+                <span>or sign in with</span>
+                <div class="flex-1 h-px bg-gray-200"></div>
+            </div>
+            <div class="flex flex-wrap gap-3">
+                <button
+                    class="flex-1 min-w-[42%] py-2 flex items-center justify-center gap-2 border border-gray-200 dark:border-slate-700 rounded-md shadow hover:bg-gray-50 dark:hover:bg-slate-800 transition text-gray-700 dark:text-gray-100 font-medium text-sm">
+                    <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/google/google-original.svg"
+                        alt="Google" class="w-5 h-5" />
+                    Google
+                </button>
+                <button
+                    class="flex-1 min-w-[42%] py-2 flex items-center justify-center gap-2 border border-gray-200 dark:border-slate-700 rounded-md shadow hover:bg-gray-50 dark:hover:bg-slate-800 transition text-gray-700 dark:text-gray-100 font-medium text-sm">
+                    <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/github/github-original.svg"
+                        alt="GitHub" class="w-5 h-5" />
+                    GitHub
+                </button>
+                <button
+                    class="flex-1 min-w-[42%] py-2 flex items-center justify-center gap-2 border border-gray-200 dark:border-slate-700 rounded-md shadow hover:bg-gray-50 dark:hover:bg-slate-800 transition text-gray-700 dark:text-gray-100 font-medium text-sm">
+                    <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/apple/apple-original.svg" alt="Apple"
+                        class="w-5 h-5" />
+                    Apple
+                </button>
+                <button
+                    class="flex-1 min-w-[42%] py-2 flex items-center justify-center gap-2 border border-gray-200 dark:border-slate-700 rounded-md shadow hover:bg-gray-50 dark:hover:bg-slate-800 transition text-gray-700 dark:text-gray-100 font-medium text-sm">
+                    <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/facebook/facebook-original.svg"
+                        alt="Facebook" class="w-5 h-5" />
+                    Facebook
+                </button>
+            </div>
+        </div> -->
+
+        <!--{hook sign_in_after.htm}-->
+        <!-- 注册&条款 -->
+        <div
+            class="flex flex-col gap-2 mt-8 pt-6 border-t border-gray-200/50 dark:border-gray-700/50 text-center text-sm">
+            <span class="text-gray-500 dark:text-gray-400">
+                <span>
+                    <?php echo $view->get('language.sign_up_an_account');?>
+                </span>
+                <a href="<?php echo $view->get('user.signup.url'); ?>"
+                    class="text-blue-600 font-medium hover:underline ml-1">
+                    <?php echo $view->get('user.signup.label');?></a>
+            </span>
+            <!-- <span class="text-gray-500 dark:text-gray-400">
+                <span>By signing in, you agree to our</span>
+                <a href="#" class="text-blue-500 hover:underline">Terms</a>
+                and
+                <a href="#" class="text-blue-500 hover:underline">Privacy Policy</a>.
+            </span> -->
+            <!--{hook sign_in_terms.htm}-->
+        </div>
+    </div>
+    <!--{hook sign_in_end.htm}-->
+</main>
+
+<?php include Compile::include(APP_PATH . 'app/views/htm/footer.inc.htm');?>
+
+<script ajax-eval="true">
+    const checkbox = document.getElementById('remember-me');
+    checkbox.checked = true;
+    const hidden = document.getElementById('remember-me-hidden');
+    checkbox.addEventListener('change', function () {
+        hidden.disabled = this.checked;
+        this.value = this.checked ? '1' : '0';
+    });
+
+    new GlobalFormHandler(".ajax-form", {
+        ui: window.wellcms,
+        timeout: 2,
+        modalSize: "md"
+    });
+
+    /*30分钟token失效，刷新页面*/
+    setTimeout(() => {
+        window.location.reload();
+    }, 1800000);
+</script>
+<?php if ($view->get('signIn_by_code') && $view->get('verify_email_on')){ ?>
+<script ajax-eval="true">
+    bindClickID("send-code", function () {
+        const anchorElement = document.querySelector("[data-href]");
+        const url = anchorElement ? anchorElement.getAttribute("href") : null;
+        if (!url) {
+            console.error("No data-href attribute found");
+            return;
+        }
+
+        const emailInput = document.querySelector('input[name="email"]');
+        const emailValue = emailInput ? emailInput.value : null;
+
+        const _tokenInput = document.querySelector('input[name="_token"]');
+        const _tokenValue = _tokenInput ? _tokenInput.value : null;
+        if (!_tokenValue) {
+            console.error("Token error");
+            return;
+        }
+
+        const data = {
+            email: emailValue,
+            _token: _tokenValue,
+            key: 'codeSignIn'
+        };
+
+        postRequest(url, data, function (response) {
+            if (0 === response.code) {
+                const send = document.getElementById("send-code");
+                const completed = document.getElementById("sending-completed");
+                const countdownElement = document.getElementById('countdown');
+                let remainingTime = 60;
+                const intervalId = setInterval(() => {
+                    send.style.display = 'none';
+                    completed.style.display = '';
+                    countdownElement.style.display = '';
+                    remainingTime--;
+                    countdownElement.textContent = remainingTime;
+                    if (remainingTime <= 0) {
+                        clearInterval(intervalId);
+                    }
+                }, 1000);
+                setTimeout(() => {
+                    countdownElement.style.display = 'none';
+                    send.style.display = '';
+                    completed.style.display = 'none';
+                }, 60000);
+            } else {
+                showAlert({ State: "Error", body: response.message }, 3, {
+                    size: "md",
+                    position: "center",
+                });
+
+                /* if (url !== undefined) {
+                    setTimeout(function () {
+                        window.location.href = url;
+                    }, 3000);
+                } */
+                console.error("请求失败，错误代码:", response.code, "错误信息:", response.message);
+            }
+        });
+    });
+</script>
+<?php } ?>
+
+<!--{hook sign_in_js.htm}-->

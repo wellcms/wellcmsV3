@@ -1,0 +1,181 @@
+<?php use App\Core\Compile;?>
+<?php include Compile::include(APP_PATH.'app/views/admin/header.inc.htm');?>
+
+<!-- Breadcrumbs -->
+<div class="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
+	<nav aria-label="Breadcrumb">
+		<ol class="flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400">
+			<li>
+				<a href="<?php echo $view->get('breadcrumb.home.url');?>" class="hover:text-blue-600 transition-colors">
+					<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+							d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+					</svg>
+				</a>
+			</li>
+			<li><span class="mx-1">/</span></li>
+			<li>
+				<a href="<?php echo $view->get('breadcrumb.list.url');?>" class="hover:text-blue-600 transition-colors">
+					<?php echo $view->get('breadcrumb.list.name');?>
+				</a>
+			</li>
+			<li><span class="mx-1">/</span></li>
+			<li class="font-bold text-gray-900 dark:text-white">
+				<?php echo $view->get('breadcrumb.title.name');?>
+			</li>
+		</ol>
+	</nav>
+</div>
+
+<div class="flex justify-center w-full px-4 sm:px-0">
+	<div class="w-full max-w-4xl glass-panel rounded-2xl p-8 shadow-2xl">
+		<h2 class="text-2xl font-black mb-8 text-gray-900 dark:text-white flex items-center tracking-tight">
+			<span
+				class="p-2.5 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-xl mr-4 shadow-inner">
+				<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+						d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+				</svg>
+			</span>
+			SMTP <?php echo $view->get('language.operation');?>
+		</h2>
+
+		<form class="ajax-form space-y-6" action="<?php echo $view->get('action');?>" method="post" id="form">
+			<input type="hidden" name="_csrf_token" value="<?php echo $view->e('csrf_token');?>">
+
+			<!-- Email -->
+			<div class="space-y-2">
+				<label
+					class="block text-sm font-bold text-gray-700 dark:text-gray-300 uppercase tracking-widest text-[10px]">
+					Email
+				</label>
+				<div class="relative group">
+					<input type="email" name="email" required
+						class="w-full pl-4 pr-4 py-3.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white/50 dark:bg-slate-800/50 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all font-bold text-gray-900 dark:text-white"
+						placeholder="email@example.com" value="<?php echo $view->e('read.email');?>">
+				</div>
+			</div>
+
+			<!-- Host & Port -->
+			<div class="grid grid-cols-1 sm:grid-cols-3 gap-6">
+				<div class="sm:col-span-2 space-y-2">
+					<label
+						class="block text-sm font-bold text-gray-700 dark:text-gray-300 uppercase tracking-widest text-[10px]">
+						Host
+					</label>
+					<input type="text" name="host" required
+						class="w-full px-4 py-3.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white/50 dark:bg-slate-800/50 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all font-mono text-sm text-gray-900 dark:text-white"
+						placeholder="smtp.example.com" value="<?php echo $view->e('read.host');?>">
+				</div>
+				<div class="space-y-2">
+					<label
+						class="block text-sm font-bold text-gray-700 dark:text-gray-300 uppercase tracking-widest text-[10px]">
+						Port
+					</label>
+					<input type="number" name="port" required
+						class="w-full px-4 py-3.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white/50 dark:bg-slate-800/50 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all font-mono text-sm text-gray-900 dark:text-white"
+						placeholder="465" value="<?php echo $view->e('read.port');?>">
+				</div>
+			</div>
+
+			<!-- Username -->
+			<div class="space-y-2">
+				<label
+					class="block text-sm font-bold text-gray-700 dark:text-gray-300 uppercase tracking-widest text-[10px]">
+					Username
+				</label>
+				<input type="text" name="username" required
+					class="w-full px-4 py-3.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white/50 dark:bg-slate-800/50 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-sm text-gray-900 dark:text-white"
+					placeholder="SMTP Username" value="<?php echo $view->e('read.username');?>">
+			</div>
+
+			<!-- Password -->
+			<div class="space-y-2">
+				<label
+					class="block text-sm font-bold text-gray-700 dark:text-gray-300 uppercase tracking-widest text-[10px]">
+					Password
+				</label>
+				<input type="password" name="password" required
+					class="w-full px-4 py-3.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white/50 dark:bg-slate-800/50 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all font-mono text-sm text-gray-900 dark:text-white"
+					placeholder="SMTP Password" value="<?php echo $view->e('read.password');?>">
+			</div>
+
+			<!-- DKIM Settings -->
+			<div class="pt-4 pb-2 border-b border-gray-100 dark:border-gray-800">
+				<h3 class="text-[10px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest">DKIM
+					Settings (Anti-Spam)</h3>
+			</div>
+
+			<div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+				<!-- DKIM Domain -->
+				<div class="space-y-2">
+					<label
+						class="block text-sm font-bold text-gray-700 dark:text-gray-300 uppercase tracking-widest text-[10px]">
+						<?php echo $view->get('language.dkim_domain');?>
+					</label>
+					<input type="text" name="dkim_domain"
+						class="w-full px-4 py-3.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white/50 dark:bg-slate-800/50 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-sm text-gray-900 dark:text-white"
+						placeholder="example.com" value="<?php echo $view->e('read.dkim_domain');?>">
+				</div>
+				<!-- DKIM Selector -->
+				<div class="space-y-2">
+					<label
+						class="block text-sm font-bold text-gray-700 dark:text-gray-300 uppercase tracking-widest text-[10px]">
+						<?php echo $view->get('language.dkim_selector');?>
+					</label>
+					<input type="text" name="dkim_selector"
+						class="w-full px-4 py-3.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white/50 dark:bg-slate-800/50 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-sm text-gray-900 dark:text-white"
+						placeholder="default" value="<?php echo $view->e('read.dkim_selector');?>">
+				</div>
+			</div>
+
+			<!-- DKIM Private Key Path -->
+			<div class="space-y-2">
+				<label
+					class="block text-sm font-bold text-gray-700 dark:text-gray-300 uppercase tracking-widest text-[10px]">
+					<?php echo $view->get('language.dkim_private');?>
+				</label>
+				<input type="text" name="dkim_private"
+					class="w-full px-4 py-3.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white/50 dark:bg-slate-800/50 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all font-mono text-xs text-gray-900 dark:text-white"
+					placeholder="/path/to/dkim.private" value="<?php echo $view->e('read.dkim_private');?>">
+			</div>
+
+			<!-- DKIM Passphrase -->
+			<div class="space-y-2">
+				<label
+					class="block text-sm font-bold text-gray-700 dark:text-gray-300 uppercase tracking-widest text-[10px]">
+					<?php echo $view->get('language.dkim_passphrase');?>
+				</label>
+				<input type="password" name="dkim_passphrase"
+					class="w-full px-4 py-3.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white/50 dark:bg-slate-800/50 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-sm text-gray-900 dark:text-white"
+					placeholder="Leave empty if none" value="<?php echo $view->e('read.dkim_passphrase');?>">
+			</div>
+
+			<!-- Submit Button -->
+			<div class="pt-6">
+				<button type="submit"
+					class="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white font-black uppercase tracking-widest text-xs rounded-xl shadow-lg shadow-blue-500/30 transition-all transform active:scale-[0.98] flex items-center justify-center space-x-2">
+					<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+					</svg>
+					<span><?php echo $view->get('language.submit');?></span>
+				</button>
+			</div>
+		</form>
+	</div>
+</div>
+
+<?php include Compile::include(APP_PATH . 'app/views/admin/footer.inc.htm');?>
+<script>
+	new GlobalFormHandler(".ajax-form", {
+		loadingText: "Processing SMTP Settings...",
+		modalSize: "md",
+		modalPosition: "center",
+		timeout: 2
+	});
+
+	/*30分钟token失效，刷新页面*/
+	setTimeout(() => {
+		window.location.reload();
+	}, 1800000);
+</script>

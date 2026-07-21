@@ -1,0 +1,55 @@
+</div>
+</div>
+
+<div class="w-full mt-auto  bg-gray-100/50 dark:bg-gray-900/50">
+	<?php if (\defined('DEBUG') && \DEBUG > 1){ ?>
+	<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+		<div class="font-mono text-xs break-all text-gray-500 dark:text-gray-400">
+			<p class="font-bold">Debug Info:</p>
+			<p>Processed Time:<?php echo $view->e('website.running.processed_time'); ?></p>
+			<ul class="list-disc pl-4 mt-2 space-y-1">
+				<?php foreach ($view->get('website.running.sqls') as $SQLString) { ?>
+				<li><?php echo htmlspecialchars($SQLString); ?></li>
+				<?php } ?>
+			</ul>
+			<br>
+			<p>
+				_REQUEST:<br>
+				<?php print_r($view->get('website.running.request')); ?>
+			</p>
+		</div>
+	</div>
+	<?php } ?>
+
+	<footer
+		class="mt-auto border-t border-gray-200/50 dark:border-gray-700/50 bg-white/50 dark:bg-slate-900/50 backdrop-blur-md">
+		<div class="max-w-7xl mx-auto px-4 lg:px-8">
+			<div class="flex flex-row justify-between items-center py-4 gap-4 text-xs">
+
+				<div class="text-left">
+					<a target="_blank" href="http://www.wellcms.com/">Powered by WellCMS</a>
+				</div>
+
+				<div class="grid grid-cols-1">
+					<!--{hook my.footer_inc_processed_before.htm}-->
+					<div class="text-right">
+						Processed:
+						<b>
+							<?php echo substr($view->get('website.running.processed_time'), 0, 5); ?>
+						</b>, SQL:
+						<b>
+							<?php echo $view->get('website.running.sql_count'); ?>
+						</b>
+					</div>
+					<!--{hook my.footer_inc_processed_after.htm}-->
+				</div>
+			</div>
+		</div>
+	</footer>
+</div>
+
+<script src="<?php echo $viewPath;?>js/main.js<?php echo $staticVersion; ?>"></script>
+<!--{hook my.footer_inc_end.htm}-->
+</body>
+
+</html>

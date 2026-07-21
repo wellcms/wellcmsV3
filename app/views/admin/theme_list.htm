@@ -1,0 +1,226 @@
+<?php use App\Core\Compile;?>
+<?php include Compile::include(APP_PATH.'app/views/admin/header.inc.htm');?>
+<?php $itemList = $view->get('item_list'); ?>
+
+<!-- Actions Bar -->
+<div class="flex flex-col lg:flex-row justify-between items-center mb-8 gap-6">
+	<div class="flex items-center space-x-2 w-full lg:w-auto">
+		<div class="glass-panel p-1 rounded-xl flex items-center space-x-1">
+			<?php if ($categoryList = $view->get('header_category',[])) { foreach($categoryList as $item) { ?>
+			<a href="<?php echo $item['url'];?>"
+				class="px-4 py-2 text-sm font-bold rounded-lg transition-all <?php echo (int)$item['type'] === (int)$view->get('type') ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-white/5'; ?>">
+				<?php echo $item['name'];?>
+			</a>
+			<?php }} ?>
+		</div>
+	</div>
+
+	<div class="flex flex-col sm:flex-row items-center gap-3 w-full lg:w-auto">
+		<div class="flex items-center space-x-2 w-full sm:w-auto">
+			<select name="searchType" id="searchType"
+				class="border border-gray-200 dark:border-gray-700 rounded-xl bg-white/50 dark:bg-slate-800/50 text-sm py-2.5 px-3 outline-none focus:ring-2 focus:ring-blue-500 transition-all">
+				<?php if ($searchTypes = $view->get('search_types')) { foreach($searchTypes as $item) { ?>
+				<option value="<?php echo $item['field']; ?>"
+					<?php echo $item['field'] == $view->get('search.searchType') ? 'selected' : ''; ?>>
+					<?php echo $item['label']; ?></option>
+				<?php }} ?>
+			</select>
+			<div class="relative flex-1 sm:w-64">
+				<input type="text" name="search" id="searchInput"
+					class="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white/50 dark:bg-slate-800/50 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm transition-all"
+					placeholder="<?php echo $view->get('language.enter_keywords'); ?>"
+					value="<?php echo $view->e('search.keywords'); ?>">
+				<svg class="w-5 h-5 text-gray-400 absolute left-3 top-2.5" fill="none" stroke="currentColor"
+					viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+						d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+				</svg>
+			</div>
+			<button id="searchButton"
+				class="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-lg shadow-blue-500/30 transition-all transform active:scale-95 font-bold text-sm">
+				<?php echo $view->get('language.search'); ?>
+			</button>
+		</div>
+	</div>
+</div>
+
+<!-- Theme Grid -->
+<?php if ($itemList) { ?>
+<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6 gap-6 mb-8">
+	<?php foreach($itemList as $key => $item) { ?>
+	<div
+		class="glass-panel rounded-2xl overflow-hidden flex flex-col group transition-all hover:shadow-2xl hover:shadow-blue-500/10 hover:-translate-y-1">
+
+		<!-- Thumbnail -->
+		<div
+			class="relative aspect-video overflow-hidden bg-gray-100 dark:bg-slate-900 border-b border-gray-200 dark:border-gray-700">
+			<?php if (!empty($item['operation_links']['detail']['url'])) { ?>
+			<a href="<?php echo $item['operation_links']['detail']['url'];?>">
+				<img src="<?php echo empty($item['icon_url']) ? '' : $item['icon_url'];?>"
+					alt="<?php echo $item['name'];?>"
+					class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105">
+			</a>
+			<?php } else { ?>
+			<img src="<?php echo empty($item['icon_url']) ? '' : $item['icon_url'];?>" alt="<?php echo $item['name'];?>"
+				class="w-full h-full object-cover">
+			<?php } ?>
+
+			<!-- Badges -->
+			<div class="absolute top-3 left-3 flex flex-col gap-2">
+				<span class="px-2 py-1 rounded-lg bg-black/50 backdrop-blur-md text-white text-[10px] font-bold">
+					v<?php echo $item['version']; ?>
+				</span>
+			</div>
+
+			<?php if (!empty($item['has_upgrade'])) { ?>
+			<div class="absolute top-3 right-3">
+				<span class="flex h-5 w-5">
+					<span
+						class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+					<span
+						class="relative inline-flex rounded-full h-5 w-5 bg-green-500 border-2 border-white dark:border-slate-800"></span>
+				</span>
+			</div>
+			<?php } ?>
+		</div>
+
+		<!-- Info Section -->
+		<div class="p-5 flex-1 flex flex-col">
+			<div class="flex items-start justify-between mb-2">
+				<?php if (!empty($item['operation_links']['detail']['url'])) { ?>
+				<a href="<?php echo $item['operation_links']['detail']['url'];?>"
+					class="text-base font-bold text-gray-900 dark:text-white hover:text-blue-600 transition-colors line-clamp-1">
+					<?php echo $item['name'];?>
+				</a>
+				<?php } else { ?>
+				<span
+					class="text-base font-bold text-gray-900 dark:text-white line-clamp-1"><?php echo $item['name'];?></span>
+				<?php } ?>
+			</div>
+
+			<p class="text-xs text-gray-500 dark:text-gray-400 mb-4 line-clamp-2 flex-1">
+				<?php echo $item['brief'] ? strip_tags($item['brief']) : 'Premium WellCMS Theme Layer.'; ?>
+			</p>
+
+			<!-- Actions -->
+			<div class="flex flex-wrap items-center justify-between gap-3 mt-auto">
+				<div class="flex items-center text-[10px] uppercase tracking-wider text-gray-400 font-bold">
+					<svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+							d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+					</svg>
+					<?php echo $item['author'] ?: $view->get('language.official'); ?>
+				</div>
+
+				<div class="flex gap-2">
+					<?php if (!empty($item['operation_links']['upgrade']['url'])) { ?>
+					<a href="<?php echo $item['operation_links']['upgrade']['url'];?>"
+						data-confirm="<?php echo $view->get('language.upgrade');?> to v<?php echo $item['cloud_version']; ?>?"
+						class="ajax-get px-3 py-1.5 text-xs font-bold text-white bg-green-600 rounded-lg hover:bg-green-700 shadow-lg shadow-green-500/20 transition-all transform active:scale-95">
+						<?php echo $view->get('language.upgrade');?>
+					</a>
+					<?php } ?>
+
+
+					<?php if (!empty($item['operation_links']['install'])) { ?>
+					<a href="<?php echo $item['operation_links']['install']['url'];?>"
+						data-arg='<?php echo json_encode($item['operation_links']['install']['arg']); ?>'
+						class="ajax-post px-3 py-1.5 text-xs font-bold text-white bg-blue-600 rounded-lg hover:bg-blue-700 shadow-lg shadow-blue-500/30 transition-all transform active:scale-95"><?php echo $view->get('language.install');?></a>
+					<?php } ?>
+					<?php if (!empty($item['operation_links']['uninstall'])) { ?>
+					<a href="<?php echo $item['operation_links']['uninstall']['url'];?>"
+						data-confirm="<?php echo $view->get('language.confirm_uninstall');?>"
+						data-arg='<?php echo json_encode($item['operation_links']['uninstall']['arg']); ?>'
+						class="ajax-post px-3 py-1.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-lg shadow-lg shadow-rose-500/30 transition-all transform active:scale-95"><?php echo $view->get('language.uninstall');?></a>
+					<?php } ?>
+				</div>
+			</div>
+
+			<!-- Variant Themes support -->
+			<?php if (isset($item['children']) && is_array($item['children'])) { ?>
+			<div class="mt-4 pt-4 border-t border-dashed border-gray-200 dark:border-gray-700 space-y-2">
+				<p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">Variant Themes</p>
+				<?php foreach($item['children'] as $child) { ?>
+				<div
+					class="flex items-center justify-between p-2 rounded-lg bg-gray-50/50 dark:bg-white/5 border border-gray-100 dark:border-gray-800">
+					<span
+						class="text-xs font-medium text-gray-700 dark:text-gray-300"><?php echo $child['name']; ?></span>
+					<div class="flex gap-1">
+						<?php if (!empty($child['operation_links']['install'])) { ?>
+						<a href="<?php echo $child['operation_links']['install']['url'];?>"
+							data-arg='<?php echo json_encode($child['operation_links']['install']['arg']); ?>'
+							class="ajax-post px-2 py-1 text-[10px] font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-all"><?php echo $view->get('language.install');?></a>
+						<?php } ?>
+						<?php if (!empty($child['operation_links']['uninstall'])) { ?>
+						<a href="<?php echo $child['operation_links']['uninstall']['url'];?>"
+							data-confirm="<?php echo $view->get('language.confirm_uninstall');?>"
+							data-arg='<?php echo json_encode($child['operation_links']['uninstall']['arg']); ?>'
+							class="ajax-post px-2 py-1 text-[10px] font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-md transition-all"><?php echo $view->get('language.uninstall');?></a>
+						<?php } ?>
+					</div>
+				</div>
+				<?php } ?>
+			</div>
+			<?php } ?>
+		</div>
+	</div>
+	<?php } ?>
+</div>
+<?php } else { ?>
+<div class="glass-panel rounded-2xl p-12 text-center">
+	<div class="inline-flex p-4 bg-gray-50 dark:bg-slate-800 rounded-full mb-4 text-gray-400">
+		<svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+			<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+				d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+		</svg>
+	</div>
+	<p class="text-gray-500 dark:text-gray-400 font-medium"><?php echo $view->get('language.none');?></p>
+</div>
+<?php } ?>
+
+<!-- Pagination -->
+<?php if ($view->get('pagination.previous_link') || $view->get('pagination.next_link')) { ?>
+<div class="flex items-center justify-center space-x-2">
+	<?php if ($view->get('pagination.previous_link')) { ?>
+	<a href="<?php echo $view->get('pagination.previous_link'); ?>"
+		class="px-5 py-2.5 text-sm font-bold rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-slate-800 text-gray-600 dark:text-gray-300 hover:bg-gray-50 transition-all shadow-sm">
+		<?php echo $view->get('language.previous'); ?>
+	</a>
+	<?php } ?>
+	<?php if ($view->get('pagination.next_link')) { ?>
+	<a href="<?php echo $view->get('pagination.next_link'); ?>"
+		class="px-5 py-2.5 text-sm font-bold rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-slate-800 text-gray-600 dark:text-gray-300 hover:bg-gray-50 transition-all shadow-sm">
+		<?php echo $view->get('language.next'); ?>
+	</a>
+	<?php } ?>
+</div>
+<?php } ?>
+
+<?php include Compile::include(APP_PATH . 'app/views/admin/footer.inc.htm');?>
+<script ajax-eval="true">
+	document.addEventListener("DOMContentLoaded", function () {
+		const searchBtn = document.getElementById("searchButton");
+		if (searchBtn) {
+			searchBtn.addEventListener("click", function () {
+				const rewrite = "<?php echo $view->get('config.rewrite'); ?>";
+				const path = "<?php echo $view->get('config.path'); ?>";
+				const searchType = document.getElementById("searchType").value;
+				const keywords = document.getElementById("searchInput").value.trim();
+
+				if (!keywords) {
+					wellcms.alert("Please enter keywords");
+					return;
+				}
+
+				window.location = wellcms.url('admin/theme/list', {
+					search_type: searchType,
+					keywords: urlEncode(keywords)
+				}, {
+					url_rewrite_on: rewrite,
+					path: path
+				});
+			});
+		}
+	});
+	setTimeout(() => { window.location.reload(); }, 1800000);
+</script>
