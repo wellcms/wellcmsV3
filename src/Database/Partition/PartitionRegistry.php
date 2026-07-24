@@ -130,26 +130,35 @@ class PartitionRegistry
                         c.relname AS TABLE_NAME,
                         'RANGE' AS PARTITION_METHOD,
                         CASE WHEN EXISTS (
-                            SELECT 1 FROM pg_inherits i_sub
-                            JOIN pg_partitioned_table pt_sub
-                              ON pt_sub.partrelid = i_sub.inhrelid
+                            SELECT 1
+                            FROM pg_inherits i_sub
+                            JOIN pg_partitioned_table pt_sub ON pt_sub.partrelid = i_sub.inhrelid
                             WHERE i_sub.inhparent = c.oid
                               AND pt_sub.partstrat = 'h'
                         ) THEN 'HASH' ELSE NULL END AS SUBPARTITION_METHOD,
-                        COUNT(DISTINCT p.inhrelid) AS total_par,
-                        COUNT(DISTINCT l.inhrelid) AS total_sub
+                        COALESCE((
+                            SELECT COUNT(DISTINCT i.inhrelid)
+                            FROM pg_inherits i
+                            WHERE i.inhparent = c.oid
+                        ), 0) AS total_par,
+                        COALESCE((
+                            SELECT COUNT(DISTINCT i2.inhrelid)
+                            FROM pg_inherits i2
+                            JOIN pg_class p_sub ON p_sub.oid = i2.inhrelid
+                            WHERE i2.inhparent IN (
+                                SELECT i.inhrelid
+                                FROM pg_inherits i
+                                WHERE i.inhparent = c.oid
+                            )
+                              AND p_sub.relispartition = true
+                        ), 0) AS total_sub
                     FROM pg_class c
                     JOIN pg_partitioned_table pt ON pt.partrelid = c.oid
-                    LEFT JOIN pg_inherits i ON i.inhparent = c.oid
-                    LEFT JOIN pg_class p ON p.oid = i.inhrelid
-                      AND p.relispartition = true
-                    LEFT JOIN pg_inherits i2 ON i2.inhparent = p.oid
-                    LEFT JOIN pg_class l ON l.oid = i2.inhrelid
                     WHERE c.relname LIKE '"
                         . str_replace("'", "''", $prefixEscaped) . "%'
                       AND c.relispartition = false
                       AND pt.partstrat = 'r'
-                    GROUP BY c.relname, pt.partstrat";
+                    GROUP BY c.relname, c.oid, pt.partstrat";
         } else {
             // MySQL 原有实现（保持不变）
             $sql = "SELECT TABLE_NAME, PARTITION_METHOD, SUBPARTITION_METHOD,
