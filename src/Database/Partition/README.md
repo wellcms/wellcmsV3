@@ -98,9 +98,9 @@ $pm->unregister('forum_thread');
 
 Framework 的 `PartitionRegistry` 只接收可选第四构造参数 `?callable $declaredConfigProvider = null`，来源返回 `array<string, PartitionConfig>`，不认识插件或目录。原应用工厂提供清单来源；其他宿主可提供自己的来源。构造、注册和普通 `get/getAll` 不执行来源；一次实际冷发现至多调用一次，物理目录无表时不调用。原前三参数的调用保持有效，不强制迁移现存消费者。
 
-优先级为：已有注册项 → 未注册真实表的准确声明 → 无声明时的原推断（created_at、quarter、预建4、保留8）。声明不能自行创建/注册不存在的表，不处理纯 HASH 表，不覆盖已有缓存。清单不按启用/安装标志过滤，禁用保留表、卸载脚本尚未删完的表仍须保持原保留政策；不会加载禁用插件代码。读失败、JSON 无效、重复表声明或声明不合法会在本次注册保存及表 DDL 前抛异常，不静默回退推断。修正部署声明后沿原入口重试，不增加另一个配置库。
+优先使用真实表的完整插件声明，其次使用完整持久登记。两种来源都缺失时明确报错，禁止以 created_at、quarter、预建4或永久保留等默认值冒充恢复结果。恢复前核验真实整数分区列、HASH子分区列及每个父分区的子分区数量；表达式分区、日期列、结构冲突或元数据读取失败均阻止该批策略保存及DDL。完整声明可修复残缺旧登记，但必须通过同样的结构核验。清单不按启用/安装状态过滤，不加载插件代码，不自行创建普通表的分区。
 
-范围限制：冷发现仍只扫描默认主库；已注册表的维护仍按原 `resolveShard()` 使用专用连接。部分缓存缺项需要原显式发现入口；已缓存的错误推断不会自动重写。`getStatus()` 和 `maintainOne()` 不自行发现，后台状态页仅在空状态时调用接管。目录已删除且没有声明时无法从物理信息恢复永久政策，应先完成原卸载再删插件目录。
+扫描范围为默认主库，以及声明/登记通过 resolveShard() 定位到的整表独立主库；单表维护在所属主库执行同样的恢复核验。按键分片缺少定位上下文时明确失败，不猜测节点。固定 HASH 分区不套用时间维护；单表指定 HASH 表会明确报告其类型。后台状态页先恢复登记再读取状态，手动维护直接走统一维护入口。
 
 DDL 方言、会话超时、未来边界、正保留期清理及物理缓存代际失效保持原流程；`retention=0` 不清理过期分区。单表维护获取全局锁失败时不建连接、不执行 DDL，返回原 `MaintenanceResult` 的 `errors=1`，使 CLI 非零退出、安装不误报初始化完成；成功路径不变。全量维护的原锁忙跳过语义不改。原300秒锁租约没有续期，本扩展不证明长批次并发或卸载排空已经安全；FPM/Swoole、MySQL/PG 的实际运行仍需对应环境验收。
 
@@ -131,7 +131,7 @@ $config = new PartitionConfig(
     string $partitionColumn,     // 分区列（如 'created_at'）
     string $period = 'quarter',  // 周期：PartitionPeriod::Quarter / Month
     int $advanceCount = 4,       // 预创建分区数
-    int $retention = 8,          // 保留周期数（0 永不清除）
+    int $retention = 0,          // 保留周期数（0 永不清除）
     string $subPartitionColumn = null,  // 子分区列（如 'thread_id'）
     int $subPartitions = 0       // 子分区数
 );
@@ -285,6 +285,24 @@ php bin/partition --table=forum_thread
 
 ## 参考实现
 
-- `plugins/well_forum/install.php` — 18 张分区表的注册示例
+- `plugins/well_forum/install.php` — 17 张分区表的注册示例
 - `bin/migrate-partitions-prod` — 存量系统迁移脚本
 - `app/Jobs/PartitionMaintainJob.php` — 单任务自循环 Job 模式
+
+### 分区策略修复后的部署
+
+宿主将注册表保存在现有 KV 的 setting.partition_registry_configs 域。缓存仅作完整记录的恢复线索，维护核验通过后才迁移持久化；缺字段不填默认值。论坛新安装及升级使用 config.json 的17张表永久保留声明，下一次全量维护也会核验声明并纠正旧推断。修复登记不重写物理表结构，也不恢复过去已经删除的数据。
+
+全量维护每次补查缺失的表；明确登记的正 retention 仍会执行过期分区删除。生产更新代码后按原发布流程重建编译与资产清单，并重载常驻 Worker。
+
+当前插件安装 schema 中的 99 张 RANGE 分区表均有明确被动声明（包含消息、视频 SEO 与 Sinter 三服务），按真实分区列、周期、子分区和业务保留期恢复并持久化；普通未分区表不参与接管。外部遗留表仍须补齐对应插件声明，不能从物理结构臆造删除期限。
+
+### 准确恢复回归测试
+
+`tests/Database/Partition/PartitionRecoveryContractTest.php` 覆盖缺配置、结构冲突、缓存/KV失败及批次不发布部分策略；`PluginPartitionDeclarationContractTest.php` 核对当前99张RANGE表的声明与安装schema。
+
+`PartitionRecoveryDatabaseIntegrationTest.php` 只允许连接数据目录位于指定 `/tmp/wellcms-partition-db-*` 根内的独立测试实例，默认验证MySQL和PostgreSQL；`WELLCMS_PARTITION_TEST_DRIVERS=mysql` 可单独运行旧MySQL兼容测试。测试创建随机库/schema并只清理自身夹具，不读取站点数据库配置。
+
+MySQL分支最低兼容5.5.6，使用PARTITIONS/COLUMNS和常规JOIN、GROUP BY、CASE聚合，不使用CTE、窗口函数、JSON或8.0数据字典。PostgreSQL分支使用自身目录查询，二者不混用语法。
+
+本轮真实数据库验收覆盖 MySQL 5.5.6-rc、MySQL 8.4.8、PostgreSQL 18：恢复登记、主库路由、分区列/类型/子分区核验、未知表拒绝猜测、KV失败无DDL，以及实际预建/删除边界。MySQL 5.5.6 测试使用官方原版二进制独立实例，未以较新版本模拟。

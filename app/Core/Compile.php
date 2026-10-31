@@ -1057,24 +1057,8 @@ if (empty($name)) continue;
 foreach ($types as $type => $content) {
 if (empty($content)) continue;
 
-// 进阶压缩逻辑 (Industrial Grade Regex)
-if ($type === 'css') {
-// CSS 压缩：移除注释、多余空格、换行、分号等
-$content = preg_replace([
-'#/\*.*?\*/#s', // 移除注释
-'#\s*([\{\};,:\>])\s*#', // 移除符号两端空格
-'#;\}#', // 移除最后一个分号
-'#\s+#', // 压缩多余空格
-], ['', '$1', '}', ' '], $content);
-} else {
-// JS 压缩：简易移除单行/多行注释和换行（不破坏字符串）
-$content = preg_replace([
-'#\s*//.*?\n#', // 移除单行注释
-'#/\*.*?\*/#s', // 移除多行注释
-'#\s*([;\{\}\=\+\-\*\/\!\<\>\&\|\?])\s*#', // 移除操作符两端空格
-    '#\s+#', // 压缩多余空格
-    ], ['', '', '$1', ' '], $content);
-    }
+// 资产仅聚合并生成内容指纹。正则无法识别 JS/CSS 语法，必须原样保留源内容；
+// compress 配置继续用于 PHP/HTML 编译，不在这里用不安全的压缩改写资产。
 
     $hash = substr(md5($content), 0, 8);
     $fileName = "{$name}.{$hash}.{$type}";

@@ -272,7 +272,16 @@ class ApplicationServiceProvider implements \Framework\Providers\ServiceProvider
                     $c->get(\Framework\Cache\Interfaces\CacheInterface::class),
                     $c->get(\Framework\Database\Interfaces\DatabaseInterface::class),
                     $dialect,
-                    $declaredConfigProvider
+                    $declaredConfigProvider,
+                    static function () use ($c) {
+                        return $c->get(\App\Services\System\KeyValueService::class)->settingGet('partition_registry_configs');
+                    },
+                    static function (array $configs) use ($c): void {
+                        $kv = $c->get(\App\Services\System\KeyValueService::class);
+                        if (!$kv->settingSet('partition_registry_configs', $configs)) {
+                            throw new \RuntimeException('Unable to persist partition registry');
+                        }
+                    }
                 );
             },
             false,

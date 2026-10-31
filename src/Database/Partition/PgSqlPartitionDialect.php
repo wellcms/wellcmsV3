@@ -24,19 +24,17 @@ class PgSqlPartitionDialect implements PartitionDialectInterface
     public function compilePartitionsQuery(string $fullTableName): string
     {
         $safe = $this->quoteLiteral($fullTableName);
-        return "
-            SELECT
-                p.relname AS partition_name,
-                pg_get_expr(c.relpartbound, c.oid) AS partition_description,
-                pt.seq AS partition_ordinal_position
-            FROM pg_class c
-            CROSS JOIN LATERAL pg_partition_tree(c.relname::regclass) pt
-            JOIN pg_class p ON p.oid = pt.relid
-            WHERE c.relname = {$safe}
-              AND pt.isleaf = false
-              AND pt.level = 1
-            ORDER BY pt.seq ASC
-        ";
+        // 直接子表同时覆盖普通 RANGE 分区与 HASH 中间分区；不依赖不存在的 tree.seq。
+        return "SELECT child.relname AS partition_name,
+                    pg_get_expr(child.relpartbound, child.oid) AS partition_description,
+                    ROW_NUMBER() OVER (ORDER BY substring(pg_get_expr(child.relpartbound, child.oid)
+                        FROM 'TO[^0-9-]*(-?[0-9]+)')::bigint NULLS LAST) AS partition_ordinal_position
+                FROM pg_class parent
+                JOIN pg_namespace ns ON ns.oid = parent.relnamespace
+                JOIN pg_inherits i ON i.inhparent = parent.oid
+                JOIN pg_class child ON child.oid = i.inhrelid
+                WHERE parent.relname = {$safe} AND ns.nspname = current_schema()
+                ORDER BY partition_ordinal_position";
     }
 
     /**

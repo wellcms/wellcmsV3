@@ -42,12 +42,9 @@ class PartitionController extends BaseController
         $partitionEnabled = false;
         $pm = $this->getPartitionManager();
         if ($pm !== null) {
+            // 状态页先按真实结构和完整声明恢复登记，再读取状态；不被残缺旧缓存阻断。
+            $pm->adoptExistingTables();
             $statusList = $pm->getStatus();
-            // 缓存为空时自动扫描 information_schema 接管存量表
-            if (empty($statusList)) {
-                $pm->adoptExistingTables();
-                $statusList = $pm->getStatus();
-            }
             $partitionEnabled = true;
         }
 
@@ -112,12 +109,7 @@ class PartitionController extends BaseController
 
         try {
 
-            // 执行前确保存量表已注册
-            $statusList = $pm->getStatus();
-            if (empty($statusList)) {
-                $pm->adoptExistingTables();
-            }
-
+            // maintain() 在 DDL 前统一核验和恢复，不先读取可能残缺的旧登记。
             $result = $pm->maintain($dryRun);
 
             // 非预览模式下成功后，启动每日调度任务（如存在 Scheduler）

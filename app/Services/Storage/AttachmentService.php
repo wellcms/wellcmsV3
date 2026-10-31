@@ -78,6 +78,12 @@ class AttachmentService
     {
         Validator::make(['data' => $data], ['data' => 'required|array']);
 
+        // 上传保护：用户授权修复（2026-10-31），关联行与哈希行共用同一 IP 二进制入库边界。
+        if (isset($data['create_ip'])) {
+            list($ip, $ip2bin) = \Framework\Utils\IpHelper::normalizeIp($data['create_ip'] ?? '');
+            $data['create_ip'] = $ip2bin;
+        }
+
         $filehash = $data['filehash'] ?? '';
         if (empty($filehash)) {
             $result = $this->getModel()->insert($data);
@@ -89,11 +95,6 @@ class AttachmentService
         $lockKey = 'lock:attach:insert:' . $filehash;
         $token = $this->cache->lock($lockKey, 5) ?? null;
         if (!$token) return 0;
-
-        if (isset($data['create_ip'])) {
-            list($ip, $ip2bin) = \Framework\Utils\IpHelper::normalizeIp($data['create_ip'] ?? '');
-            $data['create_ip'] = $ip2bin;
-        }
 
         try {
             $exists = $this->getModel()->read(['filehash' => $filehash]);

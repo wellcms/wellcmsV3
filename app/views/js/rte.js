@@ -2467,6 +2467,15 @@ class WellRTE {
 
     // Editor Input Sync
     this.editorEl.addEventListener("input", () => this.updateSource());
+    this.editorEl.addEventListener("beforeinput", (e) => {
+      if (e.inputType === 'historyUndo' || e.inputType === 'historyRedo') return;
+      const selection = window.getSelection();
+      const node = selection.anchorNode;
+      const element = node && (node.nodeType === 1 ? node : node.parentElement);
+      const caret = element && element.closest('p[data-rte-image-caret]');
+      // 用户开始编辑后就是正文段落，保留主动输入的空行（包括 Enter）。
+      if (caret && this.editorEl.contains(caret)) caret.removeAttribute('data-rte-image-caret');
+    });
 
     // Cursor Tracking (Fix for Emoji Insertion)
     const saveRange = () => {
@@ -2870,17 +2879,48 @@ class WellRTE {
         const receipt = await this.options.uploadHandler(file);
         const stable = typeof receipt === "string" ? receipt : receipt.url;
         if (typeof receipt === "object" && receipt.previewUrl) this.registerFileDisplayUrl(stable, receipt.previewUrl);
-        const url = this.fileUrlMap[stable] || stable;
-        const img = `<p style="text-align:center;"><img src="${url}" style="width:100%;" data-well-img="1"></p><p><br></p>`;
-        this.restoreEditorRange(range);
-        this.ensureCursorOutsideProtected();
-        document.execCommand("insertHTML", false, img);
-        this.updateSource();
+        this.insertImage(stable, '', range);
         range = this.captureEditorRange();
       } catch (err) {
         console.error("Upload failed: " + err);
       }
     }
+  }
+
+  insertImage(url, name = '', insertionRange = null) {
+    // 上传链路保护：仅调整编辑器插图与光标占位，稳定 URL/回执和附件绑定保持原合同。
+    this.restoreEditorRange(insertionRange || this.captureEditorRange());
+    this.ensureCursorOutsideProtected();
+    const range = window.getSelection().getRangeAt(0);
+    const node = range.startContainer;
+    const element = node.nodeType === 1 ? node : node.parentElement;
+    const paragraph = element.closest('p');
+    if (range.collapsed && paragraph && paragraph.children.length === 1
+      && paragraph.firstElementChild.tagName === 'IMG' && !paragraph.textContent.trim()) {
+      let caret = paragraph.nextSibling;
+      if (!caret || caret.nodeType !== 1 || !caret.hasAttribute('data-rte-image-caret')) {
+        caret = document.createElement('p');
+        caret.setAttribute('data-rte-image-caret', '1');
+        caret.innerHTML = '<br>';
+        paragraph.after(caret);
+      }
+      range.setStart(caret, 0);
+      range.collapse(true);
+    }
+    // 只回收本编辑器生成、且尚未被用户编辑的空占位，绝不批量删除正文空行。
+    this.editorEl.querySelectorAll('p[data-rte-image-caret]').forEach(caret => {
+      if (!caret.contains(range.startContainer) && !caret.contains(range.endContainer)
+        && (caret.innerHTML === '<br>' || caret.innerHTML === '')) caret.remove();
+    });
+    const displayUrl = this.fileUrlMap[url] || url;
+    const image = document.createElement('img');
+    image.setAttribute('src', displayUrl);
+    image.alt = name;
+    image.style.width = '100%';
+    image.setAttribute('data-well-img', '1');
+    const html = `<p style="text-align:center;">${image.outerHTML}</p><p data-rte-image-caret="1"><br></p>`;
+    document.execCommand('insertHTML', false, html);
+    this.updateSource();
   }
 
   isEditorRange(range) {
@@ -2937,14 +2977,35 @@ class WellRTE {
 
   bindDragDrop() {
     const editor = this.editorEl;
+    let internalDrag = false;
+    editor.addEventListener('dragstart', (e) => {
+      internalDrag = true;
+      // 上传链路保护：沿浏览器原生移动保留原始 src，避免相对预览 URL 被绝对化后绕过稳定 URL 映射。
+      if (!e.dataTransfer) return;
+      const selection = window.getSelection();
+      const range = selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
+      if (range && !range.collapsed && this.isEditorRange(range) && selection.containsNode(e.target, true)) {
+        const content = document.createElement('div');
+        content.appendChild(range.cloneContents());
+        e.dataTransfer.setData('text/html', content.innerHTML);
+      } else if (e.target.tagName === 'IMG') {
+        e.dataTransfer.setData('text/html', e.target.outerHTML);
+      }
+    });
+    editor.addEventListener('dragend', () => {
+      internalDrag = false;
+      editor.classList.remove('is-dragging');
+      this.updateSource();
+    });
 
     ["dragenter", "dragover"].forEach((eventName) => {
       editor.addEventListener(
         eventName,
         (e) => {
+          if (internalDrag) return;
           e.preventDefault();
           e.stopPropagation();
-          editor.classList.add("is-dragging");
+          if (e.dataTransfer && Array.from(e.dataTransfer.types).includes('Files')) editor.classList.add("is-dragging");
         },
         false,
       );
@@ -2954,8 +3015,10 @@ class WellRTE {
       editor.addEventListener(
         eventName,
         (e) => {
-          e.preventDefault();
-          e.stopPropagation();
+          if (!internalDrag) {
+            e.preventDefault();
+            e.stopPropagation();
+          }
           editor.classList.remove("is-dragging");
         },
         false,
@@ -2966,7 +3029,7 @@ class WellRTE {
       "drop",
       (e) => {
         const files = e.dataTransfer && e.dataTransfer.files;
-        if (files && files.length > 0) {
+        if (!internalDrag && files && files.length > 0) {
           this.handleImageUpload(files, this.dropRange(e));
         }
       },
@@ -3272,6 +3335,11 @@ class WellRTE {
       childNodes.forEach((child) => {
         if (child.nodeType === 1) {
           const tagName = child.tagName.toLowerCase();
+          if (tagName === 'p' && child.hasAttribute('data-rte-image-caret')
+            && (child.innerHTML === '<br>' || child.innerHTML === '')) {
+            child.remove();
+            return;
+          }
           if (!allowedTags.has(tagName)) {
             child.replaceWith(document.createTextNode(child.textContent));
           } else {

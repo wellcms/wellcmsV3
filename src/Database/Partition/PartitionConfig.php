@@ -29,7 +29,7 @@ class PartitionConfig
     /** @var int 预创建分区数（默认 4 个季度） */
     public $advanceCount;
 
-    /** @var int 保留周期数（0 表示永不清除；默认 8 个季度即 2 年） */
+    /** @var int 保留周期数（0 表示永不清除；默认永久保留） */
     public $retention;
 
     /** @var string|null 子分区列（如 'thread_id' / 'user_id'），null 表示无子分区 */
@@ -46,7 +46,7 @@ class PartitionConfig
      * @param string      $partitionColumn    分区列名
      * @param string      $period             周期常量 PartitionPeriod::Quarter / Month
      * @param int         $advanceCount       预创建分区数（默认 4）
-     * @param int         $retention          保留周期数（默认 8，0 为永不清除）
+     * @param int         $retention          保留周期数（默认 0，永不清除）
      * @param string|null $subPartitionColumn 子分区列名（null 表示无子分区）
      * @param int         $subPartitions      子分区数（默认 0）
      */
@@ -55,7 +55,7 @@ class PartitionConfig
         string $partitionColumn,
         string $period = 'quarter',
         int $advanceCount = 4,
-        int $retention = 8,
+        int $retention = 0,
         ?string $subPartitionColumn = null,
         int $subPartitions = 0
     ) {

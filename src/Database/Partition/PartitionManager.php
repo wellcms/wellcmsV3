@@ -184,12 +184,9 @@ class PartitionManager
                 'trigger' => $result->trigger,
             ));
 
+            // 全量维护补齐漏管表，避免某个插件先注册后永久遮蔽其他存量表。
+            $this->registry->discoverExisting($this->prefix);
             $configs = $this->registry->getAll();
-            // 注册表为空时自动扫描 information_schema 接管存量表
-            if (empty($configs)) {
-                $this->registry->discoverExisting($this->prefix);
-                $configs = $this->registry->getAll();
-            }
             $connections = ['' => $pdo];
             foreach ($configs as $table => $config) {
                 $shard = $this->db->resolveShard($table);
@@ -250,14 +247,6 @@ class PartitionManager
         $result = new MaintenanceResult();
         $result->trigger = $this->detectTrigger();
 
-        $config = $this->registry->get($table);
-        if ($config === null) {
-            $this->logger->warning('PartitionMaintainOne: table not registered', array(
-                'table' => $table,
-            ));
-            return $result;
-        }
-
         $startTime = microtime(true);
         $lockToken = $this->cache->lock(self::LOCK_KEY, 300);
         if (!$lockToken) {
@@ -270,6 +259,10 @@ class PartitionManager
 
         $pdo = null;
         try {
+            // 单表入口也必须先核验真实结构并恢复完整政策，不能绕过全量入口的保护。
+            $this->registry->discoverExisting($this->prefix, $table);
+            $config = $this->registry->get($table);
+            if ($config === null) return $result;
             $pdo = $this->db->createFreshConnection('master', $this->db->resolveShard($table));
             // §11.2 DDL 超时保护：防止 DDL 无限阻塞业务查询
             foreach ($this->dialect->compileSessionSetup() as $sql) {
@@ -544,7 +537,7 @@ class PartitionManager
                 'table' => $fullTableName,
                 'error' => $e->getMessage(),
             ));
-            return array();
+            throw $e;
         }
     }
 
@@ -567,7 +560,8 @@ class PartitionManager
         }
 
         // PG: 'FOR VALUES FROM (X) TO (Y)' → 取 TO 后的值
-        if (preg_match('/TO\s*\((\d+)\)/i', $raw, $m)) {
+        if (preg_match('/TO\s*\(\s*MAXVALUE\s*\)/i', $raw)) return 'MAXVALUE';
+        if (preg_match("/TO\\s*\\(\\s*'?(-?\\d+)'?\\s*\\)/i", $raw, $m)) {
             return $m[1];
         }
 
