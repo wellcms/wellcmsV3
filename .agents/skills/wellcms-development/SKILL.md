@@ -44,6 +44,10 @@ description: WellCMS 3.0 核心开发、插件编写、架构审计、服务注�
 32. **运行效率铁律**：在保证契约正确前提下选择最少扫描、最少分配、最少 I/O 的实现。单次请求内严禁重复读同一文件、重复解析同一 Token/JSON、重复计算同一哈希、重复容器查找或执行可合并的数据库查询；缓存局部结果并优先单遍算法。高频链路修改必须检查时间复杂度、内存上界和外部 I/O 次数，禁止以抽象名义增加热路径层级。 涉及服务注册、启动 Hook、构造函数依赖或请求上下文注入时，必须读取并遵循 [服务加载性能约束](./references/Service_Loading_Performance.md)：注册与实例化分离，按需返回真实类型，保留副作用与 Swoole 生命周期，验证后清理探针。
 33. **完整链路与功能保全铁律**：任何功能审计、修复或重构前，必须同时吃透客户端、服务端、路由、中间件、Service、持久化、回调、任务与生命周期脚本的数据流。即使任务只点名客户端或服务端，也必须反查另一端及请求、响应、状态转换、失败、补偿、回调和清理链路；未完成全链校对前不得给出“冗余、删除、拆分”结论。已有文件、路由、方法、回调和兼容协议均视为有效契约；不理解用途时先追踪全部调用方并询问，严禁从单端视角移除功能。只有复现缺陷并证明修复不破坏全链路后才能改动。
 
+## 缓存与 KV 职责边界
+
+缓存及业务锁复用主程序 `CacheManager` 提供的 `CacheInterface`；持久配置使用 `App\Services\System\KeyValueService` 的 `settingGet()`、`settingSet()`、`settingDelete()`，插件配置按自身 `well_***` 键隔离。禁止用缓存接口的 `set/delete/clear` 代替 KV 配置读写或删除，也不得直接操作共享 `setting` 缓存键来处理插件配置。插件不得因此重写 KV 服务内部实现或另建配置存储路径。容器入口及调用示例见 [API_Reference.md](./references/API_Reference.md)。
+
 ## 📂 专项规约资源索引 (Detailed Standards)
 
 *   [Framework_Utils_Reference.md](./references/Framework_Utils_Reference.md) : **优先查阅！主程序工具类速查手册 (`src/Utils/`, `app/Utils/`)**。编写插件前先查此文档，避免重复造轮子。
@@ -64,4 +68,4 @@ description: WellCMS 3.0 核心开发、插件编写、架构审计、服务注�
 *   [Project_Structure.md](./references/Project_Structure.md) : **WellCMS 3.0 全局物理目录树速查**。
 
 ---
-*Last Updated: 2026-10-15 - 按用户确认统一页面脚本、插件资产、路由、响应码、安装升级、数据库返回值与同事务任务登记合同；以实际源码为准，不授权改动业务链路。*
+*Last Updated: 2026-10-29 - 补齐缓存与KV职责边界、原生配置接口及服务路径；既有业务合同和用户授权边界保持。*

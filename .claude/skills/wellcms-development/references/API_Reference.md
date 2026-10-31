@@ -84,12 +84,39 @@ return $this->errorMessage($this->language->get('updated_failed'), -1, $url, 5);
 - **JSON 失败**: `return $this->errorMessage($msg, $code)`
 
 ## 6. 缓存操作 (CacheInterface)
-通过主程序统一缓存接口访问，支持主程序提供的 MySQL 缓存实现，不要求用户配置 Redis；禁止直接调用 Redis 或另建缓存链路。
+
+缓存与业务锁由主程序 `CacheManager` 管理，插件通过容器取得统一接口：
+
+```php
+$cache = $container->get(\Framework\Cache\Interfaces\CacheInterface::class);
+```
+
+支持主程序提供的 MySQL 缓存实现，不要求用户配置 Redis；禁止直接调用 Redis 或另建缓存链路。
+
 - **取值**: `$cache->get($key)`
 - **存值**: `$cache->set($key, $value, $ttl)`
-- **删除**: `$cache->delete($key)`
+- **删除缓存**: `$cache->delete($key)`
+- **业务锁**: `$cache->lock($key, $ttl)` / `$cache->unlock($key, $token)`
 
-## 7. 核心常量
+上述接口只处理缓存与锁，不能代替下面的 KV 配置接口。
+
+## 7. KV 配置 (KeyValueService)
+
+持久配置复用主程序 `App\Services\System\KeyValueService`，插件以自己的 `well_***` 键读写和删除：
+
+```php
+$kv = $container->get(\App\Services\System\KeyValueService::class);
+```
+
+| 用途 | 原生接口示例 |
+|---|---|
+| 读取插件配置 | `$kv->settingGet('well_example')` |
+| 保存插件配置 | `$kv->settingSet('well_example', $settings)` |
+| 删除插件配置 | `$kv->settingDelete('well_example')` |
+
+`well_example` 应替换为实际插件键；保存、删除的布尔结果沿调用方原错误合同处理。删除仅用于明确的配置删除或卸载动作，不用于刷新读取。禁止直接通过 `CacheManager`／`CacheInterface` 设置或清理这些配置，也不得直接处理共享 `setting` 缓存键。`clearStates()` 只清当前服务的内存状态，不是删除 KV 配置；不能代替 `settingDelete()`。主程序 KV 服务内部如何实现缓存不属于插件重写范围。
+
+## 8. 核心常量
 - `APP_PATH`: 物理根目录（末尾含 /）
 - `DEBUG`: 0 生产, 1 调试, 2 开发
 - `IN_WELLCMS`: 安全验证常量

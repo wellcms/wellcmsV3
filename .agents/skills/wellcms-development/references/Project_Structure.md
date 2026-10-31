@@ -153,7 +153,7 @@
 ./app/Services
 ./app/Services/System/MenuService.php
 ./app/Services/Stats
-./app/Services/KeyValueService.php
+./app/Services/System/KeyValueService.php
 ./app/Services/AttachmentService.php
 ./app/Services/NavigationService.php
 ./app/Services/UserService.php
