@@ -96,7 +96,7 @@ class Bootstrap
                 \App\Middleware\RequestIdMiddleware::class,
                 ['headerName' => isset($requestIdConfig['header_name']) ? $requestIdConfig['header_name'] : 'X-Request-Id']
             ],
-            'LoggingContext' => [\App\Middleware\LoggingContextMiddleware::class, []],
+            'LoggingContext' => [\App\Middleware\LoggingContextMiddleware::class, ['cdnOn' => (bool)($appConfig['cdn_on'] ?? false)]],
             'ErrorHandler' => [
                 \App\Middleware\ErrorHandlerMiddleware::class,
                 [

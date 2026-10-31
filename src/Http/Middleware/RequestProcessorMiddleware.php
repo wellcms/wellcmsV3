@@ -49,7 +49,7 @@ final class RequestProcessorMiddleware implements \Framework\Http\Interfaces\Mid
 
         // 设置全局上下文 IP/UA/Host/Lang/Scheme/Port 快照件
         $uri = $request->getUri();
-        IpHelper::setContextIp(IpHelper::ip($request->getServerParams()));
+        // IP 已由 LoggingContextMiddleware 按 cdn_on 建立请求快照。
         IpHelper::setContextUa($request->getServerParams()['HTTP_USER_AGENT'] ?? '');
         IpHelper::setContextHost($request->getServerParams()['HTTP_HOST'] ?? '');
         IpHelper::setContextLang($request->getServerParams()['HTTP_ACCEPT_LANGUAGE'] ?? '');

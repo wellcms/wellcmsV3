@@ -182,31 +182,32 @@ final class IpHelper
         return (string)($source['PHP_SELF'] ?? $source['SCRIPT_NAME'] ?? '');
     }
 
-    public static function ip(array $server = []): string
+    /** 显式模式用于请求入口重新解析；省略模式时优先复用请求快照。 */
+    public static function ip(array $server = [], ?bool $cdnOn = null): string
     {
         $contextIp = self::stateHandle()->getState('contextIp');
-        if ($contextIp && self::validIp((string)$contextIp)) {
+        if ($cdnOn === null && $contextIp && self::validIp((string)$contextIp)) {
             return (string)$contextIp;
         }
 
         // 2. 尝试从传入的 server 数组或 resolveServer() 解析
         $source = self::resolveServer($server);
 
-        foreach (
-            [
-                'HTTP_CDN_SRC_IP',
-                'HTTP_X_REAL_IP',
-                'HTTP_X_FORWARDED_FOR',
-                'HTTP_CLIENT_IP',
-                'HTTP_X_CLIENT_IP',
-                'HTTP_X_CLUSTER_CLIENT_IP',
-                'REMOTE_ADDR'
-            ] as $h
-        ) {
+        // 上传共享依赖：只调整 IP 来源，保持字符串及二进制转换契约。
+        $headers = $cdnOn ? [
+            'HTTP_CDN_SRC_IP',
+            'HTTP_X_REAL_IP',
+            'HTTP_X_FORWARDED_FOR',
+            'HTTP_CLIENT_IP',
+            'HTTP_X_CLIENT_IP',
+            'HTTP_X_CLUSTER_CLIENT_IP',
+            'REMOTE_ADDR'
+        ] : ['REMOTE_ADDR'];
+        foreach ($headers as $h) {
             $ip = $source[$h] ?? '';
-            if (empty($ip)) continue;
+            if (!is_string($ip) || $ip === '') continue;
 
-            $ip = trim(explode(',', $ip)[0]);
+            $ip = $h === 'REMOTE_ADDR' ? trim($ip) : trim(explode(',', $ip)[0]);
             if (self::validIp($ip)) {
                 return $ip;
             }

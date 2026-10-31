@@ -31,6 +31,7 @@ class TokenService
     public function captureContext(\Framework\Http\Interfaces\ServerRequestInterface $request): void
     {
         $serverParams = $request->getServerParams();
+        $this->setState('capturedSession', $request->getAttribute(\Framework\Session\SessionInterface::class));
         $this->setState('capturedUa', $serverParams['HTTP_USER_AGENT'] ?? '');
         $this->setState('capturedIp', IpHelper::ip($serverParams));
         $this->setState('capturedQuery', $serverParams['QUERY_STRING'] ?? '');
@@ -61,6 +62,11 @@ class TokenService
         $queryString = $this->getState('capturedQuery', '');
         $capturedIp = $this->getState('capturedIp', '0.0.0.0');
 
+        $session = $this->getState('capturedSession');
+        if (!$session instanceof \Framework\Session\SessionInterface || $session->getId() === '') {
+            throw new \LogicException('A current session is required to generate a form token.');
+        }
+
         $data = array_merge([
             'long_ip' => $capturedIp,
             'user_agent' => $userAgent,
@@ -73,7 +79,7 @@ class TokenService
         }
 
         // 请求头和查询串是原始字节；摘要避免 JSON 编码改变生成/验证的绑定值。
-        $data['token_version'] = 2;
+        $data['token_version'] = 3;
         $data['user_agent_hash'] = hash('sha256', $data['user_agent']);
         $data['query_string_hash'] = hash('sha256', $data['query_string']);
         unset($data['user_agent'], $data['query_string']);
@@ -81,6 +87,8 @@ class TokenService
         $authKey = $this->appConfig['auth_key'] ?? '';
         $safeKey = empty($salt) ? $authKey : (SecurityHelper::decrypt($salt, $authKey) ?: $authKey);
 
+        // 上传共用校验：绑定会话，不以 CDN 开关跳过令牌验证。
+        $data['session_hash'] = hash_hmac('sha256', 'form-session:' . $session->getId(), $safeKey);
         return (string)SecurityHelper::generateToken($safeKey, $data);
     }
 
@@ -105,16 +113,23 @@ class TokenService
 
         // 已签发的无版本令牌继续使用原始字符串绑定，未知版本不得降级验证。
         $version = array_key_exists('token_version', $payload) ? $payload['token_version'] : 1;
-        if ($version !== 1 && $version !== 2) return false;
+        if ($version !== 1 && $version !== 2 && $version !== 3) return false;
 
         $userAgent = $this->getState('capturedUa', '');
         $capturedIp = $this->getState('capturedIp', '0.0.0.0');
 
-        // 1. 校验 IP
-        if (($payload['long_ip'] ?? 0) !== $capturedIp) return false;
+        // 新版表单令牌绑定当前会话；已签发旧版继续保持原 IP 绑定。
+        if ($version === 3) {
+            $session = $this->getState('capturedSession');
+            $sessionHash = $payload['session_hash'] ?? null;
+            if (!$session instanceof \Framework\Session\SessionInterface || $session->getId() === '' || !is_string($sessionHash)) return false;
+            if (!hash_equals($sessionHash, hash_hmac('sha256', 'form-session:' . $session->getId(), $safeKey))) return false;
+        } elseif (($payload['long_ip'] ?? 0) !== $capturedIp) {
+            return false;
+        }
 
         // 2. 校验 UserAgent
-        if ($version === 2) {
+        if ($version === 2 || $version === 3) {
             $uaHash = $payload['user_agent_hash'] ?? null;
             if (!is_string($uaHash) || !hash_equals($uaHash, hash('sha256', $userAgent))) return false;
         } elseif (($payload['user_agent'] ?? '') !== $userAgent) {
